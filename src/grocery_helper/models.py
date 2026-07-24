@@ -6,12 +6,12 @@ Pydantic data models for groceries, stores, and pricing.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +53,8 @@ class GroceryList(BaseModel):
     id: str = Field(description="Unique list identifier")
     name: str = Field(description="List name (e.g., 'Weekly Shop')")
     items: list[GroceryItem] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class StorePrice(BaseModel):
@@ -63,10 +63,10 @@ class StorePrice(BaseModel):
     item_name: str
     store_name: str
     store_id: Optional[str] = None
-    price: Decimal = Field(ge=0, description="Unit price in USD")
+    price: Decimal = Field(ge=Decimal("0"), description="Unit price in USD")
     unit: Unit = Field(default=Unit.EACH)
-    sale_price: Optional[Decimal] = Field(default=None, ge=0)
-    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+    sale_price: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def effective_price(self) -> Decimal:
@@ -109,4 +109,4 @@ class OptimizedCart(BaseModel):
     total_cost: Decimal
     estimated_savings: Decimal
     comparisons: list[PriceComparison] = Field(default_factory=list)
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
