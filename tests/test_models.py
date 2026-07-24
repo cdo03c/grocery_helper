@@ -33,8 +33,9 @@ class TestGroceryItem:
         assert item.checked is False
 
     def test_invalid_quantity(self) -> None:
+        bad_qty: float = -1
         with pytest.raises(Exception):
-            GroceryItem(id="x", name="Bread", quantity=-1)
+            GroceryItem(id="x", name="Bread", quantity=bad_qty)
 
 
 class TestStorePrice:

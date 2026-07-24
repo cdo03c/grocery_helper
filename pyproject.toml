@@ -63,3 +63,8 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.16.0",
 ]
+
+[tool.pyrefly]
+# Tell Pyrefly about the src-layout so it can resolve grocery_helper.* imports
+search_path = ["src"]
+python_interpreter = ".venv/bin/python"
