@@ -191,5 +191,6 @@ uv run mypy src/ tests/
 
 ## 📄 Documentation & Changelog
 
-- **Full Documentation**: Published on GitHub Pages via [MkDocs Material](https://cuyler.github.io/grocery_helper/).
+- **Shopper's Guide (Non-Developer)**: Read our [Everyday Shopper's Guide](docs/guide/user-guide.md) for a simple, non-technical walkthrough of how to save money on groceries.
+- **Full Documentation Site**: Published on GitHub Pages via [MkDocs Material](https://cuyler.github.io/grocery_helper/).
 - **Release History**: See [CHANGELOG.md](CHANGELOG.md) for detailed notes on each release.

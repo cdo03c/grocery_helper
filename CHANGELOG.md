@@ -75,4 +75,8 @@ Initial release of **Grocery Helper** — a Python library, CLI, and Streamlit a
 
 #### CI/CD & Testing
 - GitHub Actions CI workflow (`.github/workflows/ci.yml`) testing formatting, linting, type-checking, and coverage on push and pull requests.
-- Test suite with 90+ tests spanning unit tests, model tests, mock HTTP transport tests, and Streamlit `AppTest` UI flow tests.
+- Test suite with 100 tests spanning unit tests, model tests, mock HTTP transport tests, and Streamlit `AppTest` UI flow tests.
+
+#### Documentation
+- **Non-Developer Shopper's Guide**: Comprehensive, step-by-step user guide explaining the app workflow, store selection, "max stores" trip slider, AnyList sub-list export, and item naming tips for everyday shoppers.
+- **GitHub Pages Documentation Site**: MkDocs Material site deployed automatically via GitHub Actions (`.github/workflows/docs.yml`) covering architecture, Streamlit UI, CLI reference, configuration, and developer setup.

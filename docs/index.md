@@ -64,7 +64,8 @@ Most shoppers create a grocery list in AnyList and then wonder:
 
 ## Next Steps
 
-- Check out the [Getting Started](getting-started.md) guide.
+- Want a simple, non-technical walkthrough? Read our [Shopper's Guide](guide/user-guide.md).
+- Ready to install and configure? Check out the [Getting Started](getting-started.md) guide.
 - Read about the [System Architecture](architecture.md).
 - Learn about the [Streamlit Web UI](guide/streamlit.md) and [CLI Reference](guide/cli.md).
 
