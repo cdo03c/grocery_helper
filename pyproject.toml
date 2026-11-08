@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     # Streamlit UI
     "streamlit>=1.35.0",
+    "pandas>=2.0.0",
     # HTTP client for AnyList API
     "httpx>=0.27.0",
     # Data validation / models
@@ -62,6 +63,10 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.0",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.8.1",
 ]
 
 [tool.pyrefly]

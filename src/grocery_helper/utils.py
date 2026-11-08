@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from decimal import Decimal
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from cachetools import TTLCache
 
@@ -19,6 +20,7 @@ from grocery_helper.config import settings
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+
 
 def configure_logging(level: int = logging.INFO) -> None:
     """Configure root logger with a sensible format."""
@@ -34,6 +36,7 @@ def configure_logging(level: int = logging.INFO) -> None:
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
+
 
 def format_currency(amount: Decimal | float, symbol: str = "$") -> str:
     """Return a human-readable currency string, e.g. '$3.49'."""
@@ -92,6 +95,7 @@ def timed(func: F) -> F:
     log = logging.getLogger(func.__module__)
 
     if asyncio.iscoroutinefunction(func):
+
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             start = time.perf_counter()
@@ -99,6 +103,7 @@ def timed(func: F) -> F:
             elapsed = time.perf_counter() - start
             log.debug("%s completed in %.3fs", func.__qualname__, elapsed)
             return result
+
         return async_wrapper  # type: ignore[return-value]
 
     @wraps(func)
@@ -108,4 +113,5 @@ def timed(func: F) -> F:
         elapsed = time.perf_counter() - start
         log.debug("%s completed in %.3fs", func.__qualname__, elapsed)
         return result
+
     return sync_wrapper  # type: ignore[return-value]

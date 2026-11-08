@@ -1,4 +1,5 @@
 """Tests for utility helpers."""
+
 from __future__ import annotations
 
 import logging
@@ -17,7 +18,6 @@ from grocery_helper.utils import (
     timed,
     truncate,
 )
-
 
 # ---------------------------------------------------------------------------
 # configure_logging

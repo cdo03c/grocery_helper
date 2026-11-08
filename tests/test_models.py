@@ -1,11 +1,11 @@
 """Tests for data models."""
+
 from decimal import Decimal
 
 import pytest
 
 from grocery_helper.models import (
     GroceryItem,
-    GroceryList,
     PriceComparison,
     StorePrice,
     Unit,

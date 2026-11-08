@@ -1,0 +1,58 @@
+site_name: Grocery Helper
+site_description: AnyList Grocery Price Comparison & Basket Optimizer
+site_author: Cuyler O'Brien
+site_url: https://cuyler.github.io/grocery_helper/
+repo_url: https://github.com/cuyler/grocery_helper
+repo_name: cuyler/grocery_helper
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide:
+      - Shopper's Guide (Non-Developer): guide/user-guide.md
+      - Streamlit Web App: guide/streamlit.md
+      - CLI Reference: guide/cli.md
+  - Architecture: architecture.md
+  - Configuration: configuration.md
+  - Contributing & Development: development.md
+  - Changelog: changelog.md
+
