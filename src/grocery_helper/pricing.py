@@ -13,8 +13,9 @@ Responsibilities:
 from __future__ import annotations
 
 import hashlib
+import itertools
 import logging
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 
 from grocery_helper.models import (
@@ -179,7 +180,7 @@ class PricingService:
         cached = get_cached_price(key)
         if cached is not None and isinstance(cached, list):
             logger.debug("Cache hit for '%s' in ZIP %s", item.name, self._store_zip)
-            return cached  # type: ignore[no-any-return]
+            return list(cached)
 
         logger.debug("Fetching prices for '%s' in ZIP %s", item.name, self._store_zip)
         prices = await self._provider.get_prices(item, self._store_zip)
@@ -191,47 +192,107 @@ class PricingService:
         prices = await self.fetch_prices(item)
         return PriceComparison(item=item, prices=prices)
 
-    async def optimise(self, grocery_list: GroceryList) -> OptimizedCart:
+    async def optimise(
+        self,
+        grocery_list: GroceryList,
+        allowed_stores: list[str] | set[str] | None = None,
+        max_stores: int | None = None,
+    ) -> OptimizedCart:
         """
         Run the optimiser over an entire grocery list.
 
-        For each item, selects the store with the lowest effective price.
-        Also calculates basket totals for each individual store to evaluate
-        single-store shopping vs. multi-store splitting.
+        Args:
+            grocery_list: The list of grocery items to optimise.
+            allowed_stores: Optional list or set of store names to restrict search to.
+            max_stores: Maximum number of distinct stores to assign items to.
+                If set (e.g. 1 or 2), finds the combination of stores of that
+                size that minimizes total cart cost.
+
+        Returns an OptimizedCart with store assignments and basket totals.
         """
         comparisons: list[PriceComparison] = []
-        store_assignments: dict[str, str] = {}
-        total_cost = Decimal("0.00")
-        estimated_savings = Decimal("0.00")
+        allowed_set = set(allowed_stores) if allowed_stores is not None else None
 
-        # Track single-store totals
-        store_totals: dict[str, Decimal] = {}
-        store_item_counts: dict[str, int] = {}
-
+        # Fetch comparisons for all items
         for item in grocery_list.items:
             comparison = await self.compare(item)
+            if allowed_set is not None:
+                filtered_prices = [p for p in comparison.prices if p.store_name in allowed_set]
+                comparison = PriceComparison(item=item, prices=filtered_prices)
             comparisons.append(comparison)
 
-            qty = Decimal(str(item.quantity))
+        # Track single-store totals (across all allowed stores that carry all items)
+        store_totals: dict[str, Decimal] = {}
+        store_item_counts: dict[str, int] = {}
+        total_items = len(grocery_list.items)
 
-            if comparison.cheapest:
-                store_assignments[item.id] = comparison.cheapest.store_name
-                total_cost += comparison.cheapest.effective_price * qty
-                if comparison.savings:
-                    estimated_savings += comparison.savings * qty
-
-            for sp in comparison.prices:
+        for comp in comparisons:
+            qty = Decimal(str(comp.item.quantity))
+            for sp in comp.prices:
                 store_totals.setdefault(sp.store_name, Decimal("0.00"))
                 store_item_counts.setdefault(sp.store_name, 0)
                 store_totals[sp.store_name] += sp.effective_price * qty
                 store_item_counts[sp.store_name] += 1
 
-        total_items = len(grocery_list.items)
-        single_store_totals = {
-            store: cost
-            for store, cost in store_totals.items()
-            if store_item_counts[store] == total_items
-        } if total_items > 0 else {}
+        single_store_totals = (
+            {
+                store: cost
+                for store, cost in store_totals.items()
+                if store_item_counts[store] == total_items
+            }
+            if total_items > 0
+            else {}
+        )
+
+        # Determine store candidates
+        candidate_stores = sorted({sp.store_name for comp in comparisons for sp in comp.prices})
+
+        # Apply max_stores constraint if requested and fewer than candidate count
+        selected_store_subset: set[str] | None = None
+        if max_stores is not None and max_stores > 0 and len(candidate_stores) > max_stores:
+            best_subset_cost: Decimal | None = None
+            best_subset: tuple[str, ...] | None = None
+
+            for store_combo in itertools.combinations(candidate_stores, max_stores):
+                combo_set = set(store_combo)
+                combo_cost = Decimal("0.00")
+                combo_covers_all = True
+
+                for comp in comparisons:
+                    avail = [p for p in comp.prices if p.store_name in combo_set]
+                    if not avail:
+                        combo_covers_all = False
+                        break
+                    cheapest_in_combo = min(avail, key=lambda p: p.effective_price)
+                    combo_cost += cheapest_in_combo.effective_price * Decimal(
+                        str(comp.item.quantity)
+                    )
+
+                if combo_covers_all and (best_subset_cost is None or combo_cost < best_subset_cost):
+                    best_subset_cost = combo_cost
+                    best_subset = store_combo
+
+            if best_subset is not None:
+                selected_store_subset = set(best_subset)
+
+        store_assignments: dict[str, str] = {}
+        total_cost = Decimal("0.00")
+        estimated_savings = Decimal("0.00")
+
+        for comp in comparisons:
+            qty = Decimal(str(comp.item.quantity))
+            eligible_prices = (
+                [p for p in comp.prices if p.store_name in selected_store_subset]
+                if selected_store_subset is not None
+                else comp.prices
+            )
+
+            if eligible_prices:
+                cheapest_sp = min(eligible_prices, key=lambda p: p.effective_price)
+                store_assignments[comp.item.id] = cheapest_sp.store_name
+                total_cost += cheapest_sp.effective_price * qty
+                if comp.savings:
+                    estimated_savings += comp.savings * qty
 
         return OptimizedCart(
             list_id=grocery_list.id,
@@ -240,4 +301,5 @@ class PricingService:
             estimated_savings=estimated_savings,
             comparisons=comparisons,
             single_store_totals=single_store_totals,
+            max_stores_constraint=max_stores,
         )

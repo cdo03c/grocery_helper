@@ -111,7 +111,15 @@ class OptimizedCart(BaseModel):
         default_factory=dict,
         description="Total cost per store if all carried items are purchased at that store",
     )
+    max_stores_constraint: int | None = Field(
+        default=None, description="Max stores constraint applied during optimization"
+    )
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @property
+    def stores_used(self) -> list[str]:
+        """Return unique list of stores assigned in this cart."""
+        return sorted(set(self.store_assignments.values()))
 
     @property
     def best_single_store(self) -> tuple[str, Decimal] | None:

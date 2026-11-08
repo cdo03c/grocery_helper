@@ -1,4 +1,5 @@
 """Tests for the AnyList API client."""
+
 from __future__ import annotations
 
 import httpx
@@ -243,6 +244,28 @@ class TestDemoModeOperations:
         # Remove item
         await client.remove_item("list_001", "item_new")
         assert len(weekly_shop.items) == initial_item_count
+
+        # Create list
+        created_list = await client.create_list("Target Run")
+        assert created_list.name == "Target Run"
+        assert created_list.id in client._demo_store
+
+    @pytest.mark.asyncio
+    async def test_demo_export_split_lists(self) -> None:
+        from grocery_helper.pricing import PricingService
+
+        client = AnyListClient(demo_mode=True)
+        pricing = PricingService(store_zip="90210")
+        await client.authenticate()
+
+        base_list = await client.get_list("list_001")
+        cart = await pricing.optimise(base_list)
+
+        exported = await client.export_split_lists(cart, base_name="Weekly Shop")
+        assert len(exported) == len(cart.stores_used)
+        exported_names = [lst.name for lst in exported]
+        for store in cart.stores_used:
+            assert any(store in name for name in exported_names)
 
     @pytest.mark.asyncio
     async def test_demo_get_nonexistent_list_raises(self) -> None:

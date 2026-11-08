@@ -1,4 +1,5 @@
 """Tests for data models."""
+
 from decimal import Decimal
 
 import pytest

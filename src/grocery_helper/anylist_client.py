@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 from grocery_helper.config import settings
-from grocery_helper.models import GroceryItem, GroceryList, Unit
+from grocery_helper.models import GroceryItem, GroceryList, OptimizedCart, Unit
 
 logger = logging.getLogger(__name__)
 
@@ -27,34 +27,84 @@ DEMO_LISTS: list[GroceryList] = [
         id="list_001",
         name="Weekly Shop",
         items=[
-            GroceryItem(id="item_001", name="Milk", quantity=1.0, unit=Unit.GALLON, category="Dairy"),
-            GroceryItem(id="item_002", name="Sourdough Bread", quantity=1.0, unit=Unit.EACH, category="Bakery"),
-            GroceryItem(id="item_003", name="Free Range Eggs", quantity=1.0, unit=Unit.EACH, category="Dairy"),
-            GroceryItem(id="item_004", name="Honeycrisp Apples", quantity=3.0, unit=Unit.LB, category="Produce"),
-            GroceryItem(id="item_005", name="Chicken Breast", quantity=2.0, unit=Unit.LB, category="Meat"),
-            GroceryItem(id="item_006", name="Spinach", quantity=1.0, unit=Unit.EACH, category="Produce"),
+            GroceryItem(
+                id="item_001", name="Milk", quantity=1.0, unit=Unit.GALLON, category="Dairy"
+            ),
+            GroceryItem(
+                id="item_002",
+                name="Sourdough Bread",
+                quantity=1.0,
+                unit=Unit.EACH,
+                category="Bakery",
+            ),
+            GroceryItem(
+                id="item_003",
+                name="Free Range Eggs",
+                quantity=1.0,
+                unit=Unit.EACH,
+                category="Dairy",
+            ),
+            GroceryItem(
+                id="item_004",
+                name="Honeycrisp Apples",
+                quantity=3.0,
+                unit=Unit.LB,
+                category="Produce",
+            ),
+            GroceryItem(
+                id="item_005", name="Chicken Breast", quantity=2.0, unit=Unit.LB, category="Meat"
+            ),
+            GroceryItem(
+                id="item_006", name="Spinach", quantity=1.0, unit=Unit.EACH, category="Produce"
+            ),
         ],
     ),
     GroceryList(
         id="list_002",
         name="Party Supplies",
         items=[
-            GroceryItem(id="item_007", name="Tortilla Chips", quantity=2.0, unit=Unit.PACK, category="Snacks"),
-            GroceryItem(id="item_008", name="Salsa", quantity=2.0, unit=Unit.EACH, category="Snacks"),
-            GroceryItem(id="item_009", name="Guacamole", quantity=1.0, unit=Unit.EACH, category="Deli"),
-            GroceryItem(id="item_010", name="Soda 12pk", quantity=2.0, unit=Unit.PACK, category="Beverages"),
-            GroceryItem(id="item_011", name="Limes", quantity=4.0, unit=Unit.EACH, category="Produce"),
+            GroceryItem(
+                id="item_007",
+                name="Tortilla Chips",
+                quantity=2.0,
+                unit=Unit.PACK,
+                category="Snacks",
+            ),
+            GroceryItem(
+                id="item_008", name="Salsa", quantity=2.0, unit=Unit.EACH, category="Snacks"
+            ),
+            GroceryItem(
+                id="item_009", name="Guacamole", quantity=1.0, unit=Unit.EACH, category="Deli"
+            ),
+            GroceryItem(
+                id="item_010", name="Soda 12pk", quantity=2.0, unit=Unit.PACK, category="Beverages"
+            ),
+            GroceryItem(
+                id="item_011", name="Limes", quantity=4.0, unit=Unit.EACH, category="Produce"
+            ),
         ],
     ),
     GroceryList(
         id="list_003",
         name="Brunch & Coffee",
         items=[
-            GroceryItem(id="item_012", name="Pancake Mix", quantity=1.0, unit=Unit.PACK, category="Pantry"),
-            GroceryItem(id="item_013", name="Maple Syrup", quantity=1.0, unit=Unit.EACH, category="Pantry"),
+            GroceryItem(
+                id="item_012", name="Pancake Mix", quantity=1.0, unit=Unit.PACK, category="Pantry"
+            ),
+            GroceryItem(
+                id="item_013", name="Maple Syrup", quantity=1.0, unit=Unit.EACH, category="Pantry"
+            ),
             GroceryItem(id="item_014", name="Bacon", quantity=2.0, unit=Unit.PACK, category="Meat"),
-            GroceryItem(id="item_015", name="Orange Juice", quantity=1.0, unit=Unit.EACH, category="Beverages"),
-            GroceryItem(id="item_016", name="Coffee Beans", quantity=1.0, unit=Unit.PACK, category="Coffee"),
+            GroceryItem(
+                id="item_015",
+                name="Orange Juice",
+                quantity=1.0,
+                unit=Unit.EACH,
+                category="Beverages",
+            ),
+            GroceryItem(
+                id="item_016", name="Coffee Beans", quantity=1.0, unit=Unit.PACK, category="Coffee"
+            ),
         ],
     ),
 ]
@@ -90,7 +140,9 @@ class AnyListClient:
         self._session_token: str | None = None
         self._client_id: str = uuid.uuid4().hex
         self._http: httpx.AsyncClient | None = None
-        self._demo_store: dict[str, GroceryList] = {lst.id: lst.model_copy(deep=True) for lst in DEMO_LISTS}
+        self._demo_store: dict[str, GroceryList] = {
+            lst.id: lst.model_copy(deep=True) for lst in DEMO_LISTS
+        }
 
     @property
     def is_authenticated(self) -> bool:
@@ -307,6 +359,62 @@ class AnyListClient:
             raise AnyListAPIError(f"Failed to update item: {response.text}")
 
         return item
+
+    async def create_list(self, name: str) -> GroceryList:
+        """Create a new grocery list."""
+        self._require_auth()
+
+        if self._demo_mode:
+            new_id = f"list_{uuid.uuid4().hex[:8]}"
+            new_list = GroceryList(id=new_id, name=name, items=[])
+            self._demo_store[new_id] = new_list
+            return new_list
+
+        if not self._http:
+            raise RuntimeError("Client not started.")
+
+        payload = {"name": name}
+        response = await self._http.post("/data/shopping-lists/create", data=payload)
+        if response.status_code != 200:
+            raise AnyListAPIError(f"Failed to create list: {response.text}")
+
+        data = response.json()
+        list_id = str(data.get("identifier") or data.get("id") or uuid.uuid4().hex)
+        return GroceryList(id=list_id, name=name, items=[])
+
+    async def export_split_lists(
+        self,
+        cart: OptimizedCart,
+        base_name: str = "Shop",
+    ) -> list[GroceryList]:
+        """
+        Create store-specific grocery lists based on the optimized cart assignments.
+
+        For example, if items are assigned to ALDI and Kroger, this creates:
+        - "[base_name] (ALDI)"
+        - "[base_name] (Kroger)"
+        and populates each with its assigned items.
+        """
+        self._require_auth()
+
+        # Group items by assigned store
+        items_by_store: dict[str, list[GroceryItem]] = {}
+        item_lookup = {comp.item.id: comp.item for comp in cart.comparisons}
+
+        for item_id, store_name in cart.store_assignments.items():
+            if item_id in item_lookup:
+                items_by_store.setdefault(store_name, []).append(item_lookup[item_id])
+
+        created_lists: list[GroceryList] = []
+        for store_name, items in items_by_store.items():
+            list_name = f"{base_name} ({store_name})"
+            new_list = await self.create_list(list_name)
+            for item in items:
+                await self.add_item(new_list.id, item.model_copy())
+            full_list = await self.get_list(new_list.id)
+            created_lists.append(full_list)
+
+        return created_lists
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

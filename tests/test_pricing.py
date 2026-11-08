@@ -1,4 +1,5 @@
 """Tests for pricing optimisation logic."""
+
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -115,3 +116,27 @@ async def test_optimise_with_real_mock_provider() -> None:
     best_store, best_total = cart.best_single_store
     assert best_store in cart.single_store_totals
     assert best_total >= cart.total_cost
+
+
+@pytest.mark.asyncio
+async def test_optimise_with_allowed_stores() -> None:
+    """Restricting allowed_stores should only pick from the specified stores."""
+    service = PricingService(store_zip="90210")
+    cart = await service.optimise(make_list(), allowed_stores=["Trader Joe's", "Whole Foods"])
+
+    stores_assigned = set(cart.store_assignments.values())
+    assert stores_assigned.issubset({"Trader Joe's", "Whole Foods"})
+    assert "ALDI" not in stores_assigned
+
+
+@pytest.mark.asyncio
+async def test_optimise_with_max_stores_constraint() -> None:
+    """max_stores=1 should constrain all items to the single cheapest store."""
+    service = PricingService(store_zip="90210")
+    cart_constrained = await service.optimise(make_list(), max_stores=1)
+
+    assert len(cart_constrained.stores_used) == 1
+    best_store = cart_constrained.stores_used[0]
+    assert cart_constrained.best_single_store is not None
+    assert best_store == cart_constrained.best_single_store[0]
+    assert cart_constrained.total_cost == cart_constrained.best_single_store[1]

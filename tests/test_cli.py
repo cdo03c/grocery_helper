@@ -1,6 +1,8 @@
 """Tests for the CLI argument parser and command dispatch."""
+
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +17,7 @@ from grocery_helper.cli import build_parser, cmd_optimise, cmd_serve, main
 class TestBuildParser:
     def test_returns_parser(self) -> None:
         import argparse
+
         assert isinstance(build_parser(), argparse.ArgumentParser)
 
     def test_serve_defaults(self) -> None:
@@ -28,10 +31,15 @@ class TestBuildParser:
         assert args.port == 9000
         assert args.host == "0.0.0.0"
 
-    def test_optimise_positional(self) -> None:
-        args = build_parser().parse_args(["optimise", "list_abc"])
+    def test_optimise_defaults_and_flags(self) -> None:
+        args = build_parser().parse_args(
+            ["optimise", "list_001", "--demo", "--json", "--zip", "10001"]
+        )
         assert args.command == "optimise"
-        assert args.list_id == "list_abc"
+        assert args.list_id == "list_001"
+        assert args.demo is True
+        assert args.as_json is True
+        assert args.store_zip == "10001"
 
     def test_missing_subcommand_exits(self) -> None:
         with pytest.raises(SystemExit):
@@ -48,17 +56,41 @@ class TestBuildParser:
 
 
 class TestCmdOptimise:
-    def test_prints_list_id(self, capsys: pytest.CaptureFixture[str]) -> None:
-        args = build_parser().parse_args(["optimise", "my_list_123"])
+    def test_optimise_demo_table_output(self, capsys: pytest.CaptureFixture[str]) -> None:
+        args = build_parser().parse_args(["optimise", "list_001", "--demo"])
         cmd_optimise(args)
         out = capsys.readouterr().out
-        assert "my_list_123" in out
+        assert "Weekly Shop" in out
+        assert "Optimised Split Basket" in out
+        assert "Single-Store Basket Totals" in out
+        assert "Best single-trip store" in out
 
-    def test_prints_todo(self, capsys: pytest.CaptureFixture[str]) -> None:
-        args = build_parser().parse_args(["optimise", "x"])
+    def test_optimise_demo_json_output(self, capsys: pytest.CaptureFixture[str]) -> None:
+        args = build_parser().parse_args(["optimise", "list_001", "--demo", "--json"])
         cmd_optimise(args)
         out = capsys.readouterr().out
-        assert "TODO" in out
+        data = json.loads(out)
+        assert data["list_id"] == "list_001"
+        assert data["list_name"] == "Weekly Shop"
+        assert "total_cost" in data
+        assert "store_assignments" in data
+        assert "single_store_totals" in data
+
+    def test_optimise_with_max_stores_cli(self, capsys: pytest.CaptureFixture[str]) -> None:
+        args = build_parser().parse_args(
+            ["optimise", "list_001", "--demo", "--max-stores", "1", "--json"]
+        )
+        cmd_optimise(args)
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assigned_stores = set(data["store_assignments"].values())
+        assert len(assigned_stores) == 1
+
+    def test_optimise_invalid_list_id_exits(self) -> None:
+        args = build_parser().parse_args(["optimise", "non_existent_id", "--demo"])
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_optimise(args)
+        assert exc_info.value.code == 1
 
 
 # ---------------------------------------------------------------------------
@@ -92,10 +124,10 @@ class TestCmdServe:
 
 class TestMain:
     def test_main_dispatches_optimise(self, capsys: pytest.CaptureFixture[str]) -> None:
-        with patch("sys.argv", ["grocery-helper", "optimise", "list_xyz"]):
+        with patch("sys.argv", ["grocery-helper", "optimise", "list_001", "--demo"]):
             main()
         out = capsys.readouterr().out
-        assert "list_xyz" in out
+        assert "Weekly Shop" in out
 
     def test_main_dispatches_serve(self) -> None:
         with patch("sys.argv", ["grocery-helper", "serve"]):

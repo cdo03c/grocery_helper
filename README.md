@@ -76,10 +76,10 @@ All settings live in `.env` (see `.env.example`):
 
 | Module | Status | Notes |
 |---|---|---|
-| `config.py` | ✅ Complete | Settings fully wired |
-| `models.py` | ✅ Complete | All Pydantic models |
-| `utils.py` | ✅ Complete | Formatting, caching, logging |
-| `app.py` | 🏗 Skeleton | UI structure ready; wire up clients |
-| `anylist_client.py` | 🏗 Skeleton | Auth & API stubs — needs endpoints |
-| `pricing.py` | 🏗 Skeleton | `fetch_prices` needs data source |
-| `cli.py` | ✅ Complete | `serve` and `optimise` commands |
+| `config.py` | ✅ Complete | Settings fully wired via Pydantic Settings |
+| `models.py` | ✅ Complete | All Pydantic models with single-store comparison |
+| `utils.py` | ✅ Complete | Formatting, TTL caching, logging |
+| `anylist_client.py` | ✅ Complete | Async AnyList client with internal endpoints + demo mode |
+| `pricing.py` | ✅ Complete | Pricing service with TTL cache + MockPricingProvider + basket optimization |
+| `app.py` | ✅ Complete | Interactive Streamlit UI with comparisons, charts & route breakdowns |
+| `cli.py` | ✅ Complete | `serve` and `optimise` (with `--demo`, `--json`, and single-store analysis) |
