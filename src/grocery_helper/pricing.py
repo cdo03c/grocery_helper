@@ -22,6 +22,7 @@ from typing import Protocol
 import httpx
 
 from grocery_helper.config import settings
+from grocery_helper.matcher import find_best_match, parse_quantity_and_unit
 from grocery_helper.models import (
     GroceryItem,
     GroceryList,
@@ -99,20 +100,16 @@ class MockPricingProvider:
 
     async def get_prices(self, item: GroceryItem, store_zip: str) -> list[StorePrice]:
         """Generate realistic prices for the requested item across configured stores."""
-        item_lower = item.name.lower().strip()
+        parsed_qty, parsed_unit, cleaned_name = parse_quantity_and_unit(item.name)
+        matched_unit: Unit = parsed_unit or item.unit
+        best_cand, score = find_best_match(cleaned_name, list(self.KNOWN_CATALOG.keys()))
 
-        # Find matching known item or derive base price from name hash
-        base_price: Decimal | None = None
-        matched_unit: Unit = item.unit
-
-        for key, (price, unit) in self.KNOWN_CATALOG.items():
-            if key in item_lower or item_lower in key:
-                base_price = price
-                matched_unit = unit
-                break
-
-        if base_price is None:
-            # Deterministic base price between $1.99 and $7.99 based on md5 hash
+        if best_cand and score >= 0.35:
+            base_price, catalog_unit = self.KNOWN_CATALOG[best_cand]
+            if parsed_unit is None:
+                matched_unit = catalog_unit
+        else:
+            item_lower = cleaned_name.lower().strip()
             hash_val = int(hashlib.md5(item_lower.encode()).hexdigest()[:6], 16)
             cents = 199 + (hash_val % 600)
             base_price = Decimal(f"{cents / 100:.2f}")
@@ -120,7 +117,9 @@ class MockPricingProvider:
         prices: list[StorePrice] = []
         for store_name, (multiplier, sale_mult) in self.STORE_PROFILES.items():
             # Small store-specific variation derived from store name + item
-            seed = int(hashlib.md5(f"{store_name}:{item_lower}".encode()).hexdigest()[:4], 16)
+            seed = int(
+                hashlib.md5(f"{store_name}:{cleaned_name.lower()}".encode()).hexdigest()[:4], 16
+            )
             jitter = Decimal(str(1.0 + ((seed % 15) - 7) / 100.0))
 
             price_raw = (base_price * multiplier * jitter).quantize(

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from decimal import Decimal
 from typing import Any
 
@@ -19,7 +20,7 @@ import streamlit as st
 
 from grocery_helper.anylist_client import AnyListAPIError, AnyListAuthError, AnyListClient
 from grocery_helper.config import settings
-from grocery_helper.models import GroceryList, OptimizedCart
+from grocery_helper.models import GroceryItem, GroceryList, OptimizedCart, Unit
 from grocery_helper.pricing import PricingService
 from grocery_helper.utils import configure_logging, format_currency, format_savings
 
@@ -345,6 +346,45 @@ def main() -> None:
     selected_list_id, selected_list = render_list_selector(config)
 
     if selected_list_id and selected_list:
+        with st.expander("➕ Add an Item to this List", expanded=False):
+            with st.form("add_item_form", clear_on_submit=True):
+                col_name, col_qty, col_unit = st.columns([3, 1, 1])
+                with col_name:
+                    new_name = st.text_input(
+                        "Item Name", placeholder="e.g., Avocados, Greek Yogurt"
+                    )
+                with col_qty:
+                    new_qty = st.number_input("Quantity", min_value=0.5, step=0.5, value=1.0)
+                with col_unit:
+                    new_unit = st.selectbox(
+                        "Unit",
+                        options=[u.value for u in Unit],
+                        index=0,
+                    )
+                submitted = st.form_submit_button("Add to List")
+                if submitted and new_name.strip():
+                    new_item = GroceryItem(
+                        id=f"item_{uuid.uuid4().hex[:8]}",
+                        name=new_name.strip(),
+                        quantity=float(new_qty),
+                        unit=Unit(new_unit),
+                    )
+                    client = AnyListClient(
+                        email=config["email"],
+                        password=config["password"],
+                        demo_mode=config["demo_mode"],
+                    )
+
+                    async def _add() -> None:
+                        async with client:
+                            await client.authenticate()
+                            await client.add_item(selected_list.id, new_item)
+
+                    run_async(_add())
+                    selected_list.items.append(new_item)
+                    st.success(f"Added **{new_name.strip()}** ({new_qty:g} {new_unit})!")
+                    st.rerun()
+
         with st.spinner("Fetching pricing & finding optimal deals..."):
             cart = run_async(
                 _run_pricing(
