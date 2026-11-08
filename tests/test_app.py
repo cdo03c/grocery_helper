@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 from streamlit.testing.v1 import AppTest
 
-
 APP_PATH = "src/grocery_helper/app.py"
 
 

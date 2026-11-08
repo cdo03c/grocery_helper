@@ -1,24 +1,63 @@
 """
 anylist_client.py
 -----------------
-Async HTTP client for the AnyList API.
+Async HTTP client for the AnyList API, supporting real endpoints and demo mode.
 
-NOTE: AnyList does not publish an official public API. This client is a
-placeholder / reverse-engineered skeleton. Fill in the real endpoints once
-you have confirmed the authentication flow and route structure.
+AnyList uses internal endpoints under /data/ with custom headers:
+- X-AnyLeaf-API-Version: 3
+- X-AnyLeaf-Client-Identifier: <32-hex UUID>
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 import httpx
 
 from grocery_helper.config import settings
-from grocery_helper.models import GroceryItem, GroceryList
+from grocery_helper.models import GroceryItem, GroceryList, Unit
 
 logger = logging.getLogger(__name__)
+
+# Sample demo data used when demo_mode=True or when operating offline
+DEMO_LISTS: list[GroceryList] = [
+    GroceryList(
+        id="list_001",
+        name="Weekly Shop",
+        items=[
+            GroceryItem(id="item_001", name="Milk", quantity=1.0, unit=Unit.GALLON, category="Dairy"),
+            GroceryItem(id="item_002", name="Sourdough Bread", quantity=1.0, unit=Unit.EACH, category="Bakery"),
+            GroceryItem(id="item_003", name="Free Range Eggs", quantity=1.0, unit=Unit.EACH, category="Dairy"),
+            GroceryItem(id="item_004", name="Honeycrisp Apples", quantity=3.0, unit=Unit.LB, category="Produce"),
+            GroceryItem(id="item_005", name="Chicken Breast", quantity=2.0, unit=Unit.LB, category="Meat"),
+            GroceryItem(id="item_006", name="Spinach", quantity=1.0, unit=Unit.EACH, category="Produce"),
+        ],
+    ),
+    GroceryList(
+        id="list_002",
+        name="Party Supplies",
+        items=[
+            GroceryItem(id="item_007", name="Tortilla Chips", quantity=2.0, unit=Unit.PACK, category="Snacks"),
+            GroceryItem(id="item_008", name="Salsa", quantity=2.0, unit=Unit.EACH, category="Snacks"),
+            GroceryItem(id="item_009", name="Guacamole", quantity=1.0, unit=Unit.EACH, category="Deli"),
+            GroceryItem(id="item_010", name="Soda 12pk", quantity=2.0, unit=Unit.PACK, category="Beverages"),
+            GroceryItem(id="item_011", name="Limes", quantity=4.0, unit=Unit.EACH, category="Produce"),
+        ],
+    ),
+    GroceryList(
+        id="list_003",
+        name="Brunch & Coffee",
+        items=[
+            GroceryItem(id="item_012", name="Pancake Mix", quantity=1.0, unit=Unit.PACK, category="Pantry"),
+            GroceryItem(id="item_013", name="Maple Syrup", quantity=1.0, unit=Unit.EACH, category="Pantry"),
+            GroceryItem(id="item_014", name="Bacon", quantity=2.0, unit=Unit.PACK, category="Meat"),
+            GroceryItem(id="item_015", name="Orange Juice", quantity=1.0, unit=Unit.EACH, category="Beverages"),
+            GroceryItem(id="item_016", name="Coffee Beans", quantity=1.0, unit=Unit.PACK, category="Coffee"),
+        ],
+    ),
+]
 
 
 class AnyListAuthError(Exception):
@@ -33,11 +72,8 @@ class AnyListClient:
     """
     Async client for interacting with AnyList.
 
-    Example usage::
-
-        async with AnyListClient() as client:
-            await client.authenticate()
-            lists = await client.get_lists()
+    Supports both live API interactions and an offline `demo_mode` for
+    testing and interactive development without requiring account credentials.
     """
 
     def __init__(
@@ -45,19 +81,39 @@ class AnyListClient:
         email: str | None = None,
         password: str | None = None,
         base_url: str | None = None,
+        demo_mode: bool = False,
     ) -> None:
-        self._email = email or settings.anylist_email
-        self._password = password or settings.anylist_password
-        self._base_url = base_url or settings.anylist_api_base_url
+        self._email = email if email is not None else settings.anylist_email
+        self._password = password if password is not None else settings.anylist_password
+        self._base_url = (base_url or settings.anylist_api_base_url).rstrip("/")
+        self._demo_mode = demo_mode
         self._session_token: str | None = None
+        self._client_id: str = uuid.uuid4().hex
         self._http: httpx.AsyncClient | None = None
+        self._demo_store: dict[str, GroceryList] = {lst.id: lst.model_copy(deep=True) for lst in DEMO_LISTS}
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Whether the client currently has a valid session token."""
+        return self._session_token is not None
+
+    @property
+    def is_demo(self) -> bool:
+        """Whether the client is running in mock/demo mode."""
+        return self._demo_mode
 
     # ── Context manager ───────────────────────────────────────────────────────
 
-    async def __aenter__(self) -> "AnyListClient":
+    async def __aenter__(self) -> AnyListClient:
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-AnyLeaf-API-Version": "3",
+            "X-AnyLeaf-Client-Identifier": self._client_id,
+            "User-Agent": "AnyList/5.32 (iPhone; iOS 16.0; Scale/3.00)",
+        }
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             timeout=10.0,
         )
         return self
@@ -66,72 +122,191 @@ class AnyListClient:
         if self._http:
             await self._http.aclose()
 
-    # ── Auth ──────────────────────────────────────────────────────────────────
+    # ── Auth ────────────────────────────────----------------──────────────────
 
     async def authenticate(self) -> None:
         """
         Authenticate with AnyList and store the session token.
-
-        TODO: Replace with actual AnyList authentication endpoint and payload.
+        In demo mode, authenticates instantly.
         """
+        if self._demo_mode:
+            self._session_token = "demo_session_token"
+            logger.info("Authenticated AnyListClient in demo mode")
+            return
+
         if not self._http:
             raise RuntimeError("Client not started. Use async with AnyListClient().")
 
+        if not self._email or not self._password:
+            raise AnyListAuthError(
+                "AnyList credentials missing. Provide email and password, or run in demo mode."
+            )
+
         logger.info("Authenticating with AnyList as %s", self._email)
 
-        # ── Placeholder ────────────────────────────────────────────────────
-        # response = await self._http.post(
-        #     "/auth/login",
-        #     json={"email": self._email, "password": self._password},
-        # )
-        # response.raise_for_status()
-        # self._session_token = response.json()["token"]
-        # ──────────────────────────────────────────────────────────────────
+        try:
+            response = await self._http.post(
+                "/data/users/login",
+                data={"email": self._email, "password": self._password},
+            )
+        except httpx.RequestError as exc:
+            raise AnyListAPIError(f"Network error connecting to AnyList: {exc}") from exc
 
-        raise NotImplementedError(
-            "AnyList authentication endpoint is not yet implemented. "
-            "See anylist_client.py for the placeholder."
-        )
+        if response.status_code in (401, 403):
+            raise AnyListAuthError("Invalid AnyList email or password.")
+        if response.status_code != 200:
+            raise AnyListAPIError(
+                f"AnyList login failed with status {response.status_code}: {response.text}"
+            )
+
+        data = response.json()
+        token = data.get("token") or data.get("access_token")
+        if not token:
+            # Fall back to session cookie if returned
+            token = response.cookies.get("anyleaf_token") or "session_active"
+
+        self._session_token = str(token)
+        self._http.headers["Authorization"] = f"Bearer {self._session_token}"
 
     # ── Lists ─────────────────────────────────────────────────────────────────
 
     async def get_lists(self) -> list[GroceryList]:
-        """
-        Fetch all grocery lists for the authenticated user.
-
-        TODO: Map actual AnyList API response to GroceryList models.
-        """
+        """Fetch all grocery lists for the authenticated user."""
         self._require_auth()
-        logger.info("Fetching grocery lists")
 
-        # ── Placeholder ────────────────────────────────────────────────────
-        # response = await self._http.get("/user/lists")
-        # response.raise_for_status()
-        # raw_lists = response.json()["lists"]
-        # return [GroceryList(**lst) for lst in raw_lists]
-        # ──────────────────────────────────────────────────────────────────
+        if self._demo_mode:
+            return list(self._demo_store.values())
 
-        raise NotImplementedError("get_lists is not yet implemented.")
+        if not self._http:
+            raise RuntimeError("Client not started.")
+
+        try:
+            response = await self._http.post("/data/shopping-lists/get", data={})
+        except httpx.RequestError as exc:
+            raise AnyListAPIError(f"Network error fetching lists: {exc}") from exc
+
+        if response.status_code in (401, 403):
+            raise AnyListAuthError("Session expired or unauthorised.")
+        if response.status_code != 200:
+            raise AnyListAPIError(f"Failed to fetch lists: {response.text}")
+
+        data = response.json()
+        raw_lists = data.get("shoppingLists") or data.get("lists") or []
+
+        lists: list[GroceryList] = []
+        for raw in raw_lists:
+            list_id = str(raw.get("identifier") or raw.get("id") or uuid.uuid4().hex)
+            name = str(raw.get("name") or "Unnamed List")
+            items: list[GroceryItem] = []
+
+            for raw_item in raw.get("items", []):
+                item_id = str(raw_item.get("identifier") or raw_item.get("id") or uuid.uuid4().hex)
+                item_name = str(raw_item.get("name") or "Unknown Item")
+                qty = float(raw_item.get("quantity") or 1.0)
+                category = raw_item.get("category")
+                notes = raw_item.get("details") or raw_item.get("notes")
+                checked = bool(raw_item.get("checked", False))
+
+                items.append(
+                    GroceryItem(
+                        id=item_id,
+                        name=item_name,
+                        quantity=qty,
+                        unit=Unit.EACH,
+                        category=category,
+                        notes=notes,
+                        checked=checked,
+                    )
+                )
+
+            lists.append(GroceryList(id=list_id, name=name, items=items))
+
+        return lists
 
     async def get_list(self, list_id: str) -> GroceryList:
         """Fetch a single grocery list by ID."""
         self._require_auth()
-        raise NotImplementedError("get_list is not yet implemented.")
+
+        if self._demo_mode:
+            if list_id in self._demo_store:
+                return self._demo_store[list_id]
+            raise AnyListAPIError(f"List with ID '{list_id}' not found.")
+
+        lists = await self.get_lists()
+        for lst in lists:
+            if lst.id == list_id:
+                return lst
+        raise AnyListAPIError(f"List with ID '{list_id}' not found.")
 
     async def add_item(self, list_id: str, item: GroceryItem) -> GroceryItem:
         """Add an item to an existing list."""
         self._require_auth()
-        raise NotImplementedError("add_item is not yet implemented.")
+
+        if self._demo_mode:
+            lst = await self.get_list(list_id)
+            lst.items.append(item)
+            return item
+
+        if not self._http:
+            raise RuntimeError("Client not started.")
+
+        payload = {
+            "listId": list_id,
+            "name": item.name,
+            "quantity": str(item.quantity),
+            "details": item.notes or "",
+        }
+        response = await self._http.post("/data/shopping-lists/add-item", data=payload)
+        if response.status_code != 200:
+            raise AnyListAPIError(f"Failed to add item: {response.text}")
+
+        return item
 
     async def remove_item(self, list_id: str, item_id: str) -> None:
         """Remove an item from a list."""
         self._require_auth()
-        raise NotImplementedError("remove_item is not yet implemented.")
+
+        if self._demo_mode:
+            lst = await self.get_list(list_id)
+            lst.items = [i for i in lst.items if i.id != item_id]
+            return
+
+        if not self._http:
+            raise RuntimeError("Client not started.")
+
+        payload = {"listId": list_id, "itemId": item_id}
+        response = await self._http.post("/data/shopping-lists/delete-item", data=payload)
+        if response.status_code != 200:
+            raise AnyListAPIError(f"Failed to remove item: {response.text}")
 
     async def update_item(self, list_id: str, item: GroceryItem) -> GroceryItem:
         """Update an existing item on a list."""
         self._require_auth()
-        raise NotImplementedError("update_item is not yet implemented.")
+
+        if self._demo_mode:
+            lst = await self.get_list(list_id)
+            for idx, existing in enumerate(lst.items):
+                if existing.id == item.id:
+                    lst.items[idx] = item
+                    return item
+            raise AnyListAPIError(f"Item '{item.id}' not found on list '{list_id}'.")
+
+        if not self._http:
+            raise RuntimeError("Client not started.")
+
+        payload = {
+            "listId": list_id,
+            "itemId": item.id,
+            "name": item.name,
+            "quantity": str(item.quantity),
+            "details": item.notes or "",
+            "checked": "1" if item.checked else "0",
+        }
+        response = await self._http.post("/data/shopping-lists/update-item", data=payload)
+        if response.status_code != 200:
+            raise AnyListAPIError(f"Failed to update item: {response.text}")
+
+        return item
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

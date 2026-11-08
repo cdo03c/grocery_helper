@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from decimal import Decimal
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from cachetools import TTLCache
 

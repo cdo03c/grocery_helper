@@ -1,14 +1,11 @@
 """Tests for the CLI argument parser and command dispatch."""
 from __future__ import annotations
 
-import subprocess
-import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from grocery_helper.cli import build_parser, cmd_optimise, cmd_serve, main
-
 
 # ---------------------------------------------------------------------------
 # build_parser

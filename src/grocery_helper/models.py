@@ -9,10 +9,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Optional
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -42,8 +40,8 @@ class GroceryItem(BaseModel):
     name: str = Field(description="Display name of the item")
     quantity: float = Field(default=1.0, ge=0, description="How many units to purchase")
     unit: Unit = Field(default=Unit.EACH, description="Unit of measurement")
-    category: Optional[str] = Field(default=None, description="e.g., 'Produce', 'Dairy'")
-    notes: Optional[str] = Field(default=None, description="Free-text shopper notes")
+    category: str | None = Field(default=None, description="e.g., 'Produce', 'Dairy'")
+    notes: str | None = Field(default=None, description="Free-text shopper notes")
     checked: bool = Field(default=False, description="Marked off in shopping session")
 
 
@@ -62,10 +60,10 @@ class StorePrice(BaseModel):
 
     item_name: str
     store_name: str
-    store_id: Optional[str] = None
+    store_id: str | None = None
     price: Decimal = Field(ge=Decimal("0"), description="Unit price in USD")
     unit: Unit = Field(default=Unit.EACH)
-    sale_price: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
+    sale_price: Decimal | None = Field(default=None, ge=Decimal("0"))
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
@@ -81,14 +79,14 @@ class PriceComparison(BaseModel):
     prices: list[StorePrice] = Field(default_factory=list)
 
     @property
-    def cheapest(self) -> Optional[StorePrice]:
+    def cheapest(self) -> StorePrice | None:
         """Return the StorePrice entry with the lowest effective price."""
         if not self.prices:
             return None
         return min(self.prices, key=lambda p: p.effective_price)
 
     @property
-    def savings(self) -> Optional[Decimal]:
+    def savings(self) -> Decimal | None:
         """Potential savings between most expensive and cheapest option."""
         if len(self.prices) < 2:
             return None
@@ -109,4 +107,15 @@ class OptimizedCart(BaseModel):
     total_cost: Decimal
     estimated_savings: Decimal
     comparisons: list[PriceComparison] = Field(default_factory=list)
+    single_store_totals: dict[str, Decimal] = Field(
+        default_factory=dict,
+        description="Total cost per store if all carried items are purchased at that store",
+    )
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @property
+    def best_single_store(self) -> tuple[str, Decimal] | None:
+        """Return (store_name, total) for the cheapest single store that carries items."""
+        if not self.single_store_totals:
+            return None
+        return min(self.single_store_totals.items(), key=lambda x: x[1])

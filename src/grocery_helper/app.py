@@ -9,7 +9,6 @@ Run with:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 import streamlit as st
@@ -140,7 +139,7 @@ def render_optimised_cart(list_id: str) -> None:
 
 def main() -> None:
     """Top-level Streamlit render function."""
-    sidebar_config = render_sidebar()
+    _sidebar_config = render_sidebar()
     render_hero()
 
     selected_list_id = render_list_selector()

@@ -5,7 +5,6 @@ import pytest
 
 from grocery_helper.models import (
     GroceryItem,
-    GroceryList,
     PriceComparison,
     StorePrice,
     Unit,
