@@ -140,3 +140,84 @@ async def test_optimise_with_max_stores_constraint() -> None:
     assert cart_constrained.best_single_store is not None
     assert best_store == cart_constrained.best_single_store[0]
     assert cart_constrained.total_cost == cart_constrained.best_single_store[1]
+
+
+@pytest.mark.asyncio
+async def test_kroger_provider_unconfigured() -> None:
+    """Unconfigured KrogerPricingProvider should return empty list."""
+    from grocery_helper.pricing import KrogerPricingProvider
+
+    provider = KrogerPricingProvider(client_id="", client_secret="")
+    assert provider.is_configured is False
+    res = await provider.get_prices(GroceryItem(id="k1", name="Bread"), "90210")
+    assert res == []
+
+
+@pytest.mark.asyncio
+async def test_kroger_provider_live_flow() -> None:
+    """Mock HTTP transport for Kroger OAuth2 token, location, and product pricing."""
+    import httpx
+
+    from grocery_helper.pricing import KrogerPricingProvider
+
+    def kroger_handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "/connect/oauth2/token" in url:
+            return httpx.Response(200, json={"access_token": "kroger_test_token"})
+        if "/locations" in url:
+            return httpx.Response(200, json={"data": [{"locationId": "01400943"}]})
+        if "/products" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "items": [
+                                {
+                                    "price": {
+                                        "regular": 2.79,
+                                        "promo": 2.29,
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(kroger_handler))
+    provider = KrogerPricingProvider(
+        client_id="test_cid",
+        client_secret="test_secret",
+        base_url="https://api.kroger.com/v1",
+        http_client=mock_client,
+    )
+    assert provider.is_configured is True
+
+    item = GroceryItem(id="item_kr", name="Kroger Milk", unit=Unit.GALLON)
+    prices = await provider.get_prices(item, "45202")
+
+    assert len(prices) == 1
+    assert prices[0].store_name == "Kroger"
+    assert prices[0].price == Decimal("2.79")
+    assert prices[0].sale_price == Decimal("2.29")
+    assert prices[0].effective_price == Decimal("2.29")
+
+
+@pytest.mark.asyncio
+async def test_pricing_service_overlays_live_kroger() -> None:
+    """PricingService should replace mock Kroger price with live Kroger price when available."""
+    mock_kroger = AsyncMock()
+    mock_kroger.is_configured = True
+    mock_kroger.get_prices.return_value = [
+        StorePrice(item_name="Eggs", store_name="Kroger", price=Decimal("1.49"))
+    ]
+
+    service = PricingService(store_zip="45202", kroger_provider=mock_kroger)
+    item = GroceryItem(id="egg_1", name="Eggs", quantity=1)
+    prices = await service.fetch_prices(item)
+
+    kroger_prices = [p for p in prices if p.store_name == "Kroger"]
+    assert len(kroger_prices) == 1
+    assert kroger_prices[0].price == Decimal("1.49")

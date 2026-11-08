@@ -12,12 +12,16 @@ Responsibilities:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import itertools
 import logging
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 
+import httpx
+
+from grocery_helper.config import settings
 from grocery_helper.models import (
     GroceryItem,
     GroceryList,
@@ -146,6 +150,148 @@ class MockPricingProvider:
         return prices
 
 
+class KrogerPricingProvider:
+    """
+    Live store pricing provider using the Kroger Developer API.
+
+    API docs: https://developer.kroger.com
+    Requires client_id and client_secret from Kroger Developer Portal.
+    Uses OAuth2 client_credentials flow to query store locations and live item pricing.
+    """
+
+    def __init__(
+        self,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        base_url: str | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._client_id = client_id if client_id is not None else settings.kroger_client_id
+        self._client_secret = (
+            client_secret if client_secret is not None else settings.kroger_client_secret
+        )
+        self._base_url = (base_url or settings.kroger_api_base_url).rstrip("/")
+        self._http = http_client
+        self._access_token: str | None = None
+        self._location_cache: dict[str, str] = {}
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether valid client credentials have been supplied."""
+        return bool(self._client_id and self._client_secret)
+
+    async def _get_token(self, client: httpx.AsyncClient) -> str:
+        """Acquire an OAuth2 bearer token using client_credentials grant."""
+        if self._access_token:
+            return self._access_token
+
+        creds = f"{self._client_id}:{self._client_secret}"
+        encoded = base64.b64encode(creds.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        res = await client.post(
+            f"{self._base_url}/connect/oauth2/token",
+            data={"grant_type": "client_credentials", "scope": "product.compact"},
+            headers=headers,
+        )
+        if res.status_code != 200:
+            raise RuntimeError(
+                f"Kroger authentication failed with status {res.status_code}: {res.text}"
+            )
+
+        token = str(res.json().get("access_token"))
+        self._access_token = token
+        return token
+
+    async def get_location_id(self, client: httpx.AsyncClient, store_zip: str) -> str | None:
+        """Find the nearest Kroger store location identifier for the given ZIP code."""
+        if store_zip in self._location_cache:
+            return self._location_cache[store_zip]
+
+        token = await self._get_token(client)
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        res = await client.get(
+            f"{self._base_url}/locations",
+            params={"filter.zipCode.near": store_zip, "filter.limit": 1},
+            headers=headers,
+        )
+        if res.status_code != 200:
+            return None
+
+        data = res.json().get("data", [])
+        if not data:
+            return None
+
+        loc_id = str(data[0].get("locationId"))
+        self._location_cache[store_zip] = loc_id
+        return loc_id
+
+    async def get_prices(self, item: GroceryItem, store_zip: str) -> list[StorePrice]:
+        """Fetch live item price from the nearest Kroger location."""
+        if not self.is_configured:
+            return []
+
+        async def _query(client: httpx.AsyncClient) -> list[StorePrice]:
+            token = await self._get_token(client)
+            location_id = await self.get_location_id(client, store_zip)
+            if not location_id:
+                return []
+
+            headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+            res = await client.get(
+                f"{self._base_url}/products",
+                params={
+                    "filter.term": item.name,
+                    "filter.locationId": location_id,
+                    "filter.limit": 1,
+                },
+                headers=headers,
+            )
+            if res.status_code != 200:
+                return []
+
+            products = res.json().get("data", [])
+            if not products:
+                return []
+
+            product = products[0]
+            items = product.get("items", [])
+            if not items:
+                return []
+
+            price_info = items[0].get("price", {})
+            regular_price = price_info.get("regular")
+            promo_price = price_info.get("promo")
+
+            if regular_price is None:
+                return []
+
+            regular_dec = Decimal(str(regular_price))
+            promo_dec = Decimal(str(promo_price)) if promo_price is not None else None
+
+            return [
+                StorePrice(
+                    item_name=item.name,
+                    store_name="Kroger",
+                    store_id=f"kroger_{location_id}",
+                    price=regular_dec,
+                    unit=item.unit,
+                    sale_price=promo_dec,
+                )
+            ]
+
+        try:
+            if self._http is not None:
+                return await _query(self._http)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                return await _query(client)
+        except Exception as exc:
+            logger.warning("Error querying Kroger API for '%s': %s", item.name, exc)
+            return []
+
+
 # ---------------------------------------------------------------------------
 # Pricing Service
 # ---------------------------------------------------------------------------
@@ -165,9 +311,11 @@ class PricingService:
         self,
         store_zip: str = "",
         provider: BasePricingProvider | None = None,
+        kroger_provider: KrogerPricingProvider | None = None,
     ) -> None:
         self._store_zip = store_zip
         self._provider: BasePricingProvider = provider or MockPricingProvider()
+        self._kroger_provider: KrogerPricingProvider = kroger_provider or KrogerPricingProvider()
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -184,6 +332,13 @@ class PricingService:
 
         logger.debug("Fetching prices for '%s' in ZIP %s", item.name, self._store_zip)
         prices = await self._provider.get_prices(item, self._store_zip)
+
+        # If Kroger live provider is configured, overlay live Kroger prices
+        if self._kroger_provider.is_configured:
+            live_kroger = await self._kroger_provider.get_prices(item, self._store_zip)
+            if live_kroger:
+                prices = [p for p in prices if p.store_name != "Kroger"] + live_kroger
+
         set_cached_price(key, prices)
         return prices
 

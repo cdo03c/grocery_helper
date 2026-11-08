@@ -37,6 +37,14 @@ class Settings(BaseSettings):
         default=3600, description="How long to cache price results (seconds)"
     )
 
+    # ── Kroger Developer API ─────────────────────────────────────────────────
+    kroger_client_id: str = Field(default="", description="Kroger API Client ID")
+    kroger_client_secret: str = Field(default="", description="Kroger API Client Secret")
+    kroger_api_base_url: str = Field(
+        default="https://api.kroger.com/v1",
+        description="Base URL for the Kroger Developer API",
+    )
+
     # ── Streamlit ─────────────────────────────────────────────────────────────
     app_title: str = Field(default="Grocery Helper", description="Streamlit page title")
     debug: bool = Field(default=False, description="Enable verbose debug logging")

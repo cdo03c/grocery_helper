@@ -69,6 +69,8 @@ All settings live in `.env` (see `.env.example`):
 | `ANYLIST_PASSWORD` | AnyList account password | |
 | `DEFAULT_STORE_ZIP` | ZIP code for store lookups | |
 | `PRICE_CACHE_TTL_SECONDS` | Cache duration in seconds | `3600` |
+| `KROGER_CLIENT_ID` | Kroger Developer API Client ID (optional live data) | |
+| `KROGER_CLIENT_SECRET` | Kroger Developer API Client Secret | |
 | `APP_TITLE` | Streamlit page title | `Grocery Helper` |
 | `DEBUG` | Enable verbose logging | `false` |
 
@@ -77,9 +79,9 @@ All settings live in `.env` (see `.env.example`):
 | Module | Status | Notes |
 |---|---|---|
 | `config.py` | ✅ Complete | Settings fully wired via Pydantic Settings |
-| `models.py` | ✅ Complete | All Pydantic models with single-store comparison |
+| `models.py` | ✅ Complete | All Pydantic models with single-store & max-stores comparison |
 | `utils.py` | ✅ Complete | Formatting, TTL caching, logging |
-| `anylist_client.py` | ✅ Complete | Async AnyList client with internal endpoints + demo mode |
-| `pricing.py` | ✅ Complete | Pricing service with TTL cache + MockPricingProvider + basket optimization |
-| `app.py` | ✅ Complete | Interactive Streamlit UI with comparisons, charts & route breakdowns |
-| `cli.py` | ✅ Complete | `serve` and `optimise` (with `--demo`, `--json`, and single-store analysis) |
+| `anylist_client.py` | ✅ Complete | Async AnyList client with internal endpoints, demo mode & sub-list export |
+| `pricing.py` | ✅ Complete | Pricing service with TTL cache + Mock & Kroger Developer API providers + route optimizer |
+| `app.py` | ✅ Complete | Interactive Streamlit UI with comparisons, charts, filters & AnyList export |
+| `cli.py` | ✅ Complete | `serve` and `optimise` (with `--demo`, `--json`, `--max-stores`, `--stores`, and single-store analysis) |
