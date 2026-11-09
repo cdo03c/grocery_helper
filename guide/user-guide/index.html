@@ -1,0 +1,1455 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AnyList Grocery Price Comparison & Basket Optimizer">
+      
+      
+        <meta name="author" content="Cuyler O'Brien">
+      
+      
+        <link rel="canonical" href="https://cuyler.github.io/grocery_helper/guide/user-guide/">
+      
+      
+        <link rel="prev" href="../../getting-started/">
+      
+      
+        <link rel="next" href="../streamlit/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Shopper's Guide (Non-Developer) - Grocery Helper</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#shoppers-guide-non-developer" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Grocery Helper" class="md-header__button md-logo" aria-label="Grocery Helper" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Grocery Helper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Shopper's Guide (Non-Developer)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/cuyler/grocery_helper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    cuyler/grocery_helper
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../configuration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Configuration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../development/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing & Development
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Grocery Helper" class="md-nav__button md-logo" aria-label="Grocery Helper" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Grocery Helper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/cuyler/grocery_helper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    cuyler/grocery_helper
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shopper's Guide (Non-Developer)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shopper's Guide (Non-Developer)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-does-grocery-helper-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 What Does Grocery Helper Do?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-start-the-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 How to Start the App
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step-walkthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧭 Step-by-Step Walkthrough
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🧭 Step-by-Step Walkthrough">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-choose-demo-mode-or-connect-your-anylist-account" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Choose Demo Mode or Connect Your AnyList Account
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-choose-your-local-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Choose Your Local Stores
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-choose-your-trip-style-max-stores-slider" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Choose Your Trip Style ("Max Stores" Slider)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-review-your-savings-price-comparisons" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Review Your Savings &amp; Price Comparisons
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-add-extra-or-forgotten-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Add Extra or Forgotten Items
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-export-custom-lists-to-your-phone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Export Custom Lists to Your Phone
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips-for-writing-items-in-anylist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📝 Tips for Writing Items in AnyList
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📝 Tips for Writing Items in AnyList">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#include-quantities-and-units" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Include Quantities and Units
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#specify-varieties-or-organic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Specify Varieties or Organic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dont-worry-about-minor-typos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Don't Worry About Minor Typos
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frequently-asked-questions-faq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ❓ Frequently Asked Questions (FAQ)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="❓ Frequently Asked Questions (FAQ)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#do-i-need-a-paid-anylist-subscription" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do I need a paid AnyList subscription?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-if-i-dont-have-an-anylist-account" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What if I don't have an AnyList account?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-does-grocery-helper-know-grocery-prices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How does Grocery Helper know grocery prices?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-if-a-store-doesnt-carry-an-item-on-my-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What if a store doesn't carry an item on my list?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-run-this-without-an-internet-connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I run this without an internet connection?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../streamlit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Streamlit Web App
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing & Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-does-grocery-helper-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 What Does Grocery Helper Do?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-start-the-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 How to Start the App
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step-walkthrough" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧭 Step-by-Step Walkthrough
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🧭 Step-by-Step Walkthrough">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-choose-demo-mode-or-connect-your-anylist-account" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Choose Demo Mode or Connect Your AnyList Account
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-choose-your-local-stores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Choose Your Local Stores
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-choose-your-trip-style-max-stores-slider" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Choose Your Trip Style ("Max Stores" Slider)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-review-your-savings-price-comparisons" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Review Your Savings &amp; Price Comparisons
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-add-extra-or-forgotten-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Add Extra or Forgotten Items
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-export-custom-lists-to-your-phone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Export Custom Lists to Your Phone
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tips-for-writing-items-in-anylist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📝 Tips for Writing Items in AnyList
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📝 Tips for Writing Items in AnyList">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#include-quantities-and-units" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Include Quantities and Units
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#specify-varieties-or-organic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Specify Varieties or Organic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dont-worry-about-minor-typos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Don't Worry About Minor Typos
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#frequently-asked-questions-faq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ❓ Frequently Asked Questions (FAQ)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="❓ Frequently Asked Questions (FAQ)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#do-i-need-a-paid-anylist-subscription" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do I need a paid AnyList subscription?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-if-i-dont-have-an-anylist-account" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What if I don't have an AnyList account?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-does-grocery-helper-know-grocery-prices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How does Grocery Helper know grocery prices?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-if-a-store-doesnt-carry-an-item-on-my-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What if a store doesn't carry an item on my list?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#can-i-run-this-without-an-internet-connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Can I run this without an internet connection?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="shoppers-guide-non-developer">🛍️ Shopper's Guide (Non-Developer)</h1>
+<p>Welcome to <strong>Grocery Helper</strong>! This guide is written for everyday shoppers who want to save money on groceries without spending hours comparing store circulars or flipping between different shopping apps.</p>
+<hr />
+<h2 id="what-does-grocery-helper-do">🎯 What Does Grocery Helper Do?</h2>
+<p>Grocery prices vary wildly between stores. Milk might be \$1.80 cheaper at ALDI, while fresh sourdough is cheaper at Trader Joe's, and your favorite coffee is on sale at Kroger.</p>
+<p><strong>Grocery Helper</strong>:
+1. Connects to your <strong>AnyList</strong> grocery list (on your phone or computer).
+2. Checks prices across nearby stores (<strong>ALDI</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>, and <strong>Whole Foods</strong>).
+3. Tells you the <strong>cheapest single store</strong> to visit if you're in a hurry.
+4. Tells you how much more you could save by splitting your trip between <strong>2 or more stores</strong>.
+5. Automatically creates <strong>store-specific shopping lists back on your phone</strong> so you can easily check items off while shopping!</p>
+<pre class="mermaid"><code>flowchart LR
+    A["📱 Your AnyList&lt;br/&gt;('Weekly Groceries')"] --&gt; B["🛒 Grocery Helper&lt;br/&gt;(Price Comparison Engine)"]
+    B --&gt; C["🏪 Store A List&lt;br/&gt;('ALDI - Produce &amp; Dairy')"]
+    B --&gt; D["🏪 Store B List&lt;br/&gt;('Trader Joe's - Snacks')"]</code></pre>
+<hr />
+<h2 id="how-to-start-the-app">🚀 How to Start the App</h2>
+<p>You don't need to know how to code to run Grocery Helper.</p>
+<ol>
+<li>Open your computer's <strong>Terminal</strong> (Mac) or <strong>Command Prompt / PowerShell</strong> (Windows).</li>
+<li>Type or paste this command and press <strong>Enter</strong>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>grocery-helper<span class="w"> </span>serve
+</code></pre></div></li>
+<li>Your web browser will automatically open with the Grocery Helper dashboard (at <code>http://localhost:8501</code>).</li>
+</ol>
+<div class="admonition tip">
+<p class="admonition-title">Closing the App</p>
+<p>When you are done, simply close your browser window. In your terminal, you can press <kbd>Ctrl</kbd> + <kbd>C</kbd> to stop the app.</p>
+</div>
+<hr />
+<h2 id="step-by-step-walkthrough">🧭 Step-by-Step Walkthrough</h2>
+<p>When the web app opens, you'll see a clean shopping dashboard with a sidebar on the left and your shopping lists on the right.</p>
+<h3 id="step-1-choose-demo-mode-or-connect-your-anylist-account">Step 1: Choose Demo Mode or Connect Your AnyList Account</h3>
+<ul>
+<li><strong>Just Want to Try It Out?</strong>
+  Keep <strong>Demo Mode</strong> checked in the left sidebar! The app comes preloaded with sample lists (<em>"Weekly Shop"</em>, <em>"Party Supplies"</em>, and <em>"Brunch &amp; Coffee"</em>) so you can test all features without entering any credentials.</li>
+<li><strong>Ready to Use Your Own Lists?</strong>
+  In the left sidebar, uncheck <strong>Demo Mode</strong> and enter your AnyList <strong>Email</strong> and <strong>Password</strong>. Your lists will automatically appear in the dropdown menu.</li>
+</ul>
+<blockquote>
+<p>[!NOTE]
+Your AnyList password is stored only on your computer in your local configuration and is never sent to third-party tracking servers.</p>
+</blockquote>
+<hr />
+<h3 id="step-2-choose-your-local-stores">Step 2: Choose Your Local Stores</h3>
+<p>Not everyone has every grocery store nearby. In the sidebar under <strong>"Allowed Stores"</strong>:
+- Check the stores you are willing to shop at (e.g., <strong>ALDI</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>).
+- Uncheck any stores that aren't near you or that you don't prefer.</p>
+<p>You can also enter your <strong>ZIP Code</strong> to automatically find the closest branch locations.</p>
+<hr />
+<h3 id="step-3-choose-your-trip-style-max-stores-slider">Step 3: Choose Your Trip Style ("Max Stores" Slider)</h3>
+<p>How much time do you have to shop this week? Use the <strong>"Max Store Stops"</strong> slider to set your preference:</p>
+<table>
+<thead>
+<tr>
+<th>Slider Setting</th>
+<th>What It Means</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1 Store</strong></td>
+<td>Finds the <strong>single cheapest store</strong> for your entire basket. Zero extra driving.</td>
+<td>Busy weekdays or quick errands.</td>
+</tr>
+<tr>
+<td><strong>2 Stores</strong></td>
+<td>Splits your basket across the top 2 stores to unlock major savings while keeping driving manageable.</td>
+<td>The sweet spot for weekly shopping!</td>
+</tr>
+<tr>
+<td><strong>3+ Stores</strong></td>
+<td>Finds the absolute rock-bottom price across every store.</td>
+<td>Maximum possible budget savings.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="step-4-review-your-savings-price-comparisons">Step 4: Review Your Savings &amp; Price Comparisons</h3>
+<p>Click the <strong>Price Comparison</strong> tab to see a breakdown of your list:
+- Each item is shown alongside its price at every selected store.
+- <strong>Green badges</strong> highlight promotional sales and discounts.
+- The <strong>Cheapest Store</strong> column shows you exactly where to buy each item.
+- The <strong>Savings</strong> column shows how much you save on each product compared to the highest-priced store.</p>
+<hr />
+<h3 id="step-5-add-extra-or-forgotten-items">Step 5: Add Extra or Forgotten Items</h3>
+<p>Realized you forgot something while reviewing prices?
+1. Click the <strong>"➕ Add an Item to this List"</strong> box above the tabs.
+2. Type in the item name (e.g. <em>"Greek Yogurt"</em> or <em>"Honeycrisp Apples"</em>).
+3. Choose the quantity and unit (e.g. <code>2</code>, <code>lb</code>).
+4. Click <strong>"Add to List"</strong>.</p>
+<p>The app immediately refreshes with the updated totals and savings!</p>
+<hr />
+<h3 id="step-6-export-custom-lists-to-your-phone">Step 6: Export Custom Lists to Your Phone</h3>
+<p>Once you're happy with your shopping plan, switch to the <strong>Optimised Cart</strong> tab:
+1. Review your total spend, your estimated savings, and the items assigned to each store.
+2. Click the big green button: <strong>"📤 Export Store Lists to AnyList"</strong>.
+3. Open the <strong>AnyList app on your iPhone or Android</strong>.</p>
+<p>You will find new, beautifully organized sub-lists (for example, <em>"Weekly Groceries (ALDI)"</em> and <em>"Weekly Groceries (Trader Joe's)"</em>). When you walk into ALDI, open your ALDI list and check off items as you go!</p>
+<hr />
+<h2 id="tips-for-writing-items-in-anylist">📝 Tips for Writing Items in AnyList</h2>
+<p>Grocery Helper includes a smart matching engine that automatically detects item sizes, units, and spelling. Follow these simple tips when adding items to your grocery list for the most accurate prices:</p>
+<h3 id="include-quantities-and-units">Include Quantities and Units</h3>
+<p>If you know how much you need, include the quantity right in the item title:
+- <code>"Honeycrisp Apples 3 lbs"</code>
+- <code>"Whole Milk 1 gal"</code>
+- <code>"Diet Coke 12pk"</code>
+- <code>"Eggs 1 dozen"</code> (or <code>"Eggs 12ct"</code>)</p>
+<h3 id="specify-varieties-or-organic">Specify Varieties or Organic</h3>
+<p>If you prefer organic or specific varieties, mention it:
+- <code>"Organic Bananas"</code> vs. <code>"Bananas"</code>
+- <code>"Sourdough Bread"</code> vs. <code>"Bread"</code>
+- <code>"Boneless Skinless Chicken Breast"</code> vs. <code>"Chicken"</code></p>
+<h3 id="dont-worry-about-minor-typos">Don't Worry About Minor Typos</h3>
+<p>The matching engine automatically corrects minor spelling differences (e.g., <em>"avacados"</em>, <em>"spinich"</em> or abbreviations like <em>"Coffee w/ milk"</em>).</p>
+<hr />
+<h2 id="frequently-asked-questions-faq">❓ Frequently Asked Questions (FAQ)</h2>
+<h3 id="do-i-need-a-paid-anylist-subscription">Do I need a paid AnyList subscription?</h3>
+<p><strong>No.</strong> Grocery Helper works with both free AnyList accounts and AnyList Complete (paid) accounts.</p>
+<h3 id="what-if-i-dont-have-an-anylist-account">What if I don't have an AnyList account?</h3>
+<p>You can still use Grocery Helper completely free in <strong>Demo Mode</strong>! It will give you realistic price comparisons, route optimizations, and savings estimates using built-in grocery lists.</p>
+<h3 id="how-does-grocery-helper-know-grocery-prices">How does Grocery Helper know grocery prices?</h3>
+<ul>
+<li><strong>Live Store APIs</strong>: For supported chains like Kroger (and its family of stores like Ralphs, Dillons, King Soopers, Fred Meyer), Grocery Helper connects directly to live product catalogs and weekly sale circulars.</li>
+<li><strong>Regional Price Models</strong>: For chains like ALDI and Trader Joe's, Grocery Helper uses calibrated regional grocery price benchmarks that reflect everyday retail pricing.</li>
+</ul>
+<h3 id="what-if-a-store-doesnt-carry-an-item-on-my-list">What if a store doesn't carry an item on my list?</h3>
+<p>If an item isn't available at a specific store, Grocery Helper flags it and automatically assigns that item to another store on your route that does carry it.</p>
+<h3 id="can-i-run-this-without-an-internet-connection">Can I run this without an internet connection?</h3>
+<p>Yes! In <strong>Demo Mode</strong>, Grocery Helper works 100% offline without needing an active internet connection.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
