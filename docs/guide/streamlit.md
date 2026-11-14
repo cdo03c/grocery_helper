@@ -27,6 +27,7 @@ uv run grocery-helper serve
   - **Whole Foods Store ID**: Set your local Whole Foods store ID (e.g. `10010` Cambridge, `10380` Medford, `10156` Framingham).
   - **Whole Foods Prime Pricing**: Apply Amazon Prime member discounts when listed in the Whole Foods flyer.
   - **Include Open Prices (Crowdsourced)**: Overlay receipt- and shelf-tag-verified prices from Open Food Facts' Open Prices (`prices.openfoodfacts.org`) when items are not in weekly flyers.
+- **Saved Preferences Between Runs**: Non-secret sidebar choices (allowed stores, max stores, ZIP code, flyer/Open Prices toggles, Whole Foods store ID, and your last selected list) are automatically saved to `~/.config/grocery_helper/ui_settings.json` and restored on restart. Click **Reset Saved Settings** at the bottom of the sidebar to clear them back to `.env` defaults (credentials are never saved to this file). You can also set `DEFAULT_ALLOWED_STORES` (comma-separated store names) and `DEFAULT_MAX_STORES` directly in `.env`.
 
 ### 2. In-App Item Management
 Above the results tabs, expand **"➕ Add an Item to this List"**:
@@ -34,14 +35,7 @@ Above the results tabs, expand **"➕ Add an Item to this List"**:
 - Specify quantity and unit (each, lb, oz, gallon, pack, liter).
 - Click **"Add to List"** to immediately update the list and re-calculate optimal pricing!
 
-### 3. Price Comparison Tab
-A comprehensive data table detailing:
-- Every grocery item on your list and its quantity.
-- Prices across all considered stores (highlighting promotional sales and live weekly flyer deals with `🏷️`).
-- The identified cheapest store and best unit price.
-- Potential savings compared to the highest-priced store.
-
-### 4. Optimised Cart Tab
+### 3. Optimised Cart Tab
 - **Metric Cards**:
   - **Optimised Basket Total**: Total cost when buying each item at its cheapest store.
   - **Estimated Total Savings**: Dollar amount saved across the basket.
@@ -49,6 +43,13 @@ A comprehensive data table detailing:
 - **Cost Comparison Bar Chart**: Visual comparison of the optimized split vs. shopping exclusively at a single store.
 - **Store Route Expanders**: Itemized shopping lists grouped by store with subtotals.
 - **Export Store Lists to AnyList**: A one-click button that creates store-specific sub-lists (e.g. *"Weekly Shop (ALDI)"*) directly in your AnyList account.
+
+### 4. Price Comparison Tab
+A comprehensive data table detailing:
+- Every grocery item on your list and its quantity.
+- Prices across all considered stores (highlighting promotional sales and live weekly flyer deals with `🏷️`).
+- The identified cheapest store and best unit price.
+- Potential savings compared to the highest-priced store.
 
 ### 5. 🏷️ Weekly Sales & Flyers Tab
 Browse and search active weekly sale items directly in the app:

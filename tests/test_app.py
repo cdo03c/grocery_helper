@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -95,6 +97,9 @@ class TestListSelectorAndResults:
 
         assert not at.exception
 
+        # Verify tab order: Optimised Cart first, Price Comparison second
+        assert [t.label for t in at.tabs[:2]] == ["Optimised Cart", "Price Comparison"]
+
         # Verify subheaders for Price Comparison and Optimised Cart exist
         subheaders = [s.value for s in at.subheader]
         assert any("Price Comparison" in s for s in subheaders)
@@ -108,9 +113,9 @@ class TestListSelectorAndResults:
         assert "Estimated Total Savings" in labels
 
         # Verify comparison dataframe table rendered
-        assert len(at.dataframe) >= 1
-        df = at.dataframe[0].value
-        assert "Item" in df.columns
+        comp_dfs = [d.value for d in at.dataframe if "Item" in d.value.columns]
+        assert comp_dfs
+        df = comp_dfs[0]
         assert "Cheapest Store" in df.columns
         assert "Best Price" in df.columns
 
@@ -148,9 +153,9 @@ class TestListSelectorAndResults:
         submit_buttons[0].click().run()
 
         assert not at.exception
-        assert len(at.dataframe) >= 1
-        df = at.dataframe[0].value
-        assert "Greek Yogurt" in df["Item"].tolist()
+        comp_dfs = [d.value for d in at.dataframe if "Item" in d.value.columns]
+        assert comp_dfs
+        assert "Greek Yogurt" in comp_dfs[0]["Item"].tolist()
 
     def test_max_stores_constraint_matches_route_expanders(self, at: AppTest) -> None:
         """Setting max_stores=1 must constrain Shopping Route expanders to a single store."""
@@ -325,3 +330,54 @@ class TestFlyerHelpers:
         ]
         assert comp_dfs
         assert "Wild Caught Salmon Fillet" in comp_dfs[-1]["Item"].tolist()
+
+    def test_settings_persist_between_runs_and_reset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        from grocery_helper.config import settings
+
+        prefs_path = tmp_path / "ui_settings.json"
+        monkeypatch.setattr(settings, "anylist_email", "")
+        monkeypatch.setattr(settings, "anylist_password", "")
+        monkeypatch.setattr(settings, "ui_settings_file", str(prefs_path))
+        monkeypatch.setattr(settings, "default_allowed_stores", ["Market Basket", "Whole Foods"])
+
+        # First app run picks up .env default_allowed_stores and lets user customize
+        app1 = AppTest.from_file(APP_PATH, default_timeout=25)
+        app1.run()
+        assert not app1.exception
+        assert app1.multiselect(key="allowed_stores_filter").value == [
+            "Market Basket",
+            "Whole Foods",
+        ]
+
+        app1.multiselect(key="allowed_stores_filter").set_value(
+            ["Market Basket", "Trader Joe's", "Whole Foods"]
+        ).run()
+        app1.slider(key="max_stores_slider").set_value(2).run()
+        app1.text_input(key="store_zip").set_value("02139").run()
+        assert prefs_path.exists()
+
+        # Fresh second AppTest simulates restarting the app
+        app2 = AppTest.from_file(APP_PATH, default_timeout=25)
+        app2.run()
+        assert not app2.exception
+        assert app2.multiselect(key="allowed_stores_filter").value == [
+            "Market Basket",
+            "Trader Joe's",
+            "Whole Foods",
+        ]
+        assert app2.slider(key="max_stores_slider").value == 2
+        assert app2.text_input(key="store_zip").value == "02139"
+
+        # Reset button clears saved prefs and restores .env defaults
+        reset_btns = [b for b in app2.button if b.key == "reset_saved_settings_btn"]
+        assert len(reset_btns) == 1
+        reset_btns[0].click().run()
+        assert not app2.exception
+        assert app2.multiselect(key="allowed_stores_filter").value == [
+            "Market Basket",
+            "Whole Foods",
+        ]

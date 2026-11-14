@@ -16,3 +16,7 @@ def _isolate_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "enable_open_prices", False)
     monkeypatch.setattr(settings, "kroger_client_id", "")
     monkeypatch.setattr(settings, "kroger_client_secret", "")
+    monkeypatch.setattr(settings, "default_allowed_stores", [])
+    monkeypatch.setattr(settings, "default_max_stores", None)
+    monkeypatch.setattr(settings, "advertised_only", False)
+    monkeypatch.setattr(settings, "ui_settings_file", "")

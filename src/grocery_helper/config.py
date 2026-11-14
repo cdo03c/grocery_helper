@@ -10,11 +10,13 @@ Usage:
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from typing import Annotated, Any
 
 from dotenv import load_dotenv
-from pydantic import Field
-from pydantic_settings import BaseSettings  # pip: pydantic-settings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode  # pip: pydantic-settings
 
 # Load .env file at import time (no-op if file doesn't exist)
 load_dotenv()
@@ -92,9 +94,47 @@ class Settings(BaseSettings):
         ),
     )
 
-    # ── Streamlit ─────────────────────────────────────────────────────────────
+    # ── Streamlit & Defaults ─────────────────────────────────────────────────
     app_title: str = Field(default="Grocery Helper", description="Streamlit page title")
+    default_allowed_stores: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Optional default store names to enable (comma-separated or JSON array in .env)"
+        ),
+    )
+    default_max_stores: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional default max number of stores to visit",
+    )
+    advertised_only: bool = Field(
+        default=False,
+        description="Use only advertised weekly flyer prices for Market Basket and Whole Foods",
+    )
+    ui_settings_file: str = Field(
+        default="~/.config/grocery_helper/ui_settings.json",
+        description="Path where Streamlit UI preferences are saved between runs (empty disables)",
+    )
     debug: bool = Field(default=False, description="Enable verbose debug logging")
+
+    @field_validator("default_allowed_stores", mode="before")
+    @classmethod
+    def _parse_default_allowed_stores(cls, value: Any) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, list):
+            return [str(v).strip() for v in value if str(v).strip()]
+        if isinstance(value, str):
+            raw = value.strip()
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(v).strip() for v in parsed if str(v).strip()]
+                except ValueError:
+                    pass
+            return [part.strip() for part in raw.split(",") if part.strip()]
+        return []
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

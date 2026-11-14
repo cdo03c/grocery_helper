@@ -233,7 +233,9 @@ async def _async_optimise(args: argparse.Namespace) -> int:
         enable_live_flyers=True if getattr(args, "live_flyers", False) else None,
         enable_flipp=False if getattr(args, "no_flipp", False) else None,
         enable_open_prices=getattr(args, "open_prices", None),
-        flyer_only_for_live_stores=bool(getattr(args, "advertised_only", False)),
+        flyer_only_for_live_stores=(
+            bool(getattr(args, "advertised_only", False)) or settings.advertised_only
+        ),
         whole_foods_store_id=getattr(args, "wf_store_id", None),
         whole_foods_prime=False if getattr(args, "no_prime", False) else None,
         flipp_merchants=getattr(args, "flipp_merchants", None),
@@ -247,11 +249,16 @@ async def _async_optimise(args: argparse.Namespace) -> int:
         print(f"Error: {err}", file=sys.stderr)
         return 1
 
+    effective_allowed_stores = args.allowed_stores or (settings.default_allowed_stores or None)
+    effective_max_stores = (
+        args.max_stores if args.max_stores is not None else settings.default_max_stores
+    )
+
     try:
         cart = await pricing.optimise(
             grocery_list,
-            allowed_stores=args.allowed_stores,
-            max_stores=args.max_stores,
+            allowed_stores=effective_allowed_stores,
+            max_stores=effective_max_stores,
         )
     except ValueError as err:
         print(f"Error: {err}", file=sys.stderr)

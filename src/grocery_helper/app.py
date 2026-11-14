@@ -31,6 +31,12 @@ from grocery_helper.flyers import (
     match_flyer_deals,
 )
 from grocery_helper.models import FlyerDeal, GroceryItem, GroceryList, OptimizedCart, Unit
+from grocery_helper.preferences import (
+    clear_ui_settings,
+    load_ui_settings,
+    resolve_preferences_path,
+    save_ui_settings,
+)
 from grocery_helper.pricing import MockPricingProvider, PricingService, build_stop_count_summary
 from grocery_helper.utils import configure_logging, format_currency, format_savings
 
@@ -63,8 +69,49 @@ def run_async(coro: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+_WIDGET_KEYS_TO_RESET: tuple[str, ...] = (
+    "store_zip",
+    "allowed_stores_filter",
+    "max_stores_slider",
+    "live_flyers_toggle",
+    "flipp_toggle",
+    "advertised_only_toggle",
+    "wf_store_id_input",
+    "wf_prime_toggle",
+    "open_prices_toggle",
+    "selected_list_id",
+    "_saved_ui_prefs",
+    "_last_saved_ui_prefs",
+    "_last_saved_list_id",
+)
+
+
+def _get_initial_saved_prefs() -> dict[str, Any]:
+    """Load saved UI preferences once per Streamlit session."""
+    if "_saved_ui_prefs" not in st.session_state:
+        st.session_state["_saved_ui_prefs"] = load_ui_settings()
+    cached = st.session_state["_saved_ui_prefs"]
+    return cached if isinstance(cached, dict) else {}
+
+
+def _default_allowed_stores(
+    available_stores: list[str],
+    saved_prefs: dict[str, Any],
+) -> list[str]:
+    """Resolve initial allowed stores from saved UI prefs, .env defaults, or all stores."""
+    if "allowed_stores" in saved_prefs:
+        return [s for s in saved_prefs["allowed_stores"] if s in available_stores]
+    if settings.default_allowed_stores:
+        matched = [s for s in settings.default_allowed_stores if s in available_stores]
+        if matched:
+            return matched
+    return available_stores
+
+
 def render_sidebar() -> dict[str, Any]:
     """Render the sidebar and return user-supplied settings."""
+    saved_prefs = _get_initial_saved_prefs()
+
     with st.sidebar:
         st.title("⚙️ Settings")
         st.divider()
@@ -81,9 +128,12 @@ def render_sidebar() -> dict[str, Any]:
             type="password",
             key="anylist_password",
         )
+        store_zip_default = str(
+            saved_prefs.get("store_zip") or settings.default_store_zip or "90210"
+        )
         store_zip = st.text_input(
             "Store ZIP Code",
-            value=settings.default_store_zip or "90210",
+            value=store_zip_default,
             placeholder="90210",
             key="store_zip",
         )
@@ -98,20 +148,33 @@ def render_sidebar() -> dict[str, Any]:
 
         st.subheader("🛒 Optimisation Filters")
         available_stores = list(MockPricingProvider.STORE_PROFILES.keys())
+        allowed_default = _default_allowed_stores(available_stores, saved_prefs)
         allowed_stores = st.multiselect(
             "Allowed Stores",
             options=available_stores,
-            default=available_stores,
+            default=allowed_default,
             help="Filter stores considered during pricing & optimization.",
             key="allowed_stores_filter",
         )
         max_stores: int | None
         if len(allowed_stores) > 1:
+            raw_max = saved_prefs.get("max_stores", settings.default_max_stores)
+            default_max = (
+                min(max(1, int(raw_max)), len(allowed_stores))
+                if isinstance(raw_max, int) and not isinstance(raw_max, bool)
+                else len(allowed_stores)
+            )
+            if (
+                "max_stores_slider" in st.session_state
+                and isinstance(st.session_state["max_stores_slider"], int)
+                and st.session_state["max_stores_slider"] > len(allowed_stores)
+            ):
+                st.session_state["max_stores_slider"] = len(allowed_stores)
             max_stores = st.slider(
                 "Max Stores to Visit",
                 min_value=1,
                 max_value=len(allowed_stores),
-                value=len(allowed_stores),
+                value=default_max,
                 help="Limit the shopping route to at most N stores to reduce trips.",
                 key="max_stores_slider",
             )
@@ -125,7 +188,7 @@ def render_sidebar() -> dict[str, Any]:
         st.subheader("🏷️ Weekly Flyers (MB, Whole Foods & Flipp)")
         enable_live_flyers = st.toggle(
             "Enable Live Weekly Flyers",
-            value=settings.enable_live_flyers,
+            value=bool(saved_prefs.get("enable_live_flyers", settings.enable_live_flyers)),
             help=(
                 "Overlay live advertised weekly sale prices from Market Basket, "
                 "Whole Foods, and nearby stores on Flipp onto price comparisons."
@@ -134,7 +197,7 @@ def render_sidebar() -> dict[str, Any]:
         )
         enable_flipp = st.toggle(
             "Include Nearby Flipp Stores (by ZIP)",
-            value=settings.enable_flipp,
+            value=bool(saved_prefs.get("enable_flipp", settings.enable_flipp)),
             disabled=not enable_live_flyers,
             help=(
                 "Discover local grocery store circulars for your ZIP code via Flipp "
@@ -144,7 +207,7 @@ def render_sidebar() -> dict[str, Any]:
         )
         advertised_only = st.checkbox(
             "Advertised flyer prices only (MB & Whole Foods)",
-            value=False,
+            value=bool(saved_prefs.get("advertised_only", settings.advertised_only)),
             disabled=not enable_live_flyers,
             help=(
                 "Show only live weekly sale items for Market Basket and Whole Foods "
@@ -152,9 +215,12 @@ def render_sidebar() -> dict[str, Any]:
             ),
             key="advertised_only_toggle",
         )
+        wf_store_default = str(
+            saved_prefs.get("whole_foods_store_id") or settings.whole_foods_store_id
+        )
         wf_store_id_raw = st.text_input(
             "Whole Foods Store ID",
-            value=settings.whole_foods_store_id,
+            value=wf_store_default,
             help=(
                 "5-digit Store ID from wholefoodsmarket.com/sales-flyer?store-id=... "
                 "(e.g., 10010 Cambridge, 10380 Medford, 10156 Framingham, "
@@ -174,19 +240,47 @@ def render_sidebar() -> dict[str, Any]:
             )
         wf_prime = st.toggle(
             "Whole Foods Prime Pricing",
-            value=settings.whole_foods_prime,
+            value=bool(saved_prefs.get("whole_foods_prime", settings.whole_foods_prime)),
             help="Apply Amazon Prime member sale prices when listed in the Whole Foods flyer.",
             key="wf_prime_toggle",
         )
         enable_open_prices = st.toggle(
             "Include Open Prices (Crowdsourced)",
-            value=settings.enable_open_prices,
+            value=bool(saved_prefs.get("enable_open_prices", settings.enable_open_prices)),
             help=(
                 "Overlay crowdsourced retail receipt/shelf prices from Open Prices "
                 "(prices.openfoodfacts.org) for non-sale items when available."
             ),
             key="open_prices_toggle",
         )
+
+        prefs_path = resolve_preferences_path()
+        if prefs_path is not None:
+            persisted_payload: dict[str, Any] = {
+                "store_zip": store_zip,
+                "allowed_stores": list(allowed_stores),
+                "max_stores": max_stores,
+                "enable_live_flyers": enable_live_flyers,
+                "enable_flipp": enable_flipp,
+                "advertised_only": advertised_only,
+                "whole_foods_store_id": wf_store_id,
+                "whole_foods_prime": wf_prime,
+                "enable_open_prices": enable_open_prices,
+            }
+            if st.session_state.get("_last_saved_ui_prefs") != persisted_payload:
+                save_ui_settings(persisted_payload)
+                st.session_state["_last_saved_ui_prefs"] = persisted_payload
+
+            st.caption("💾 Settings auto-saved between runs", help=f"Saved at {prefs_path}")
+            if st.button(
+                "Reset Saved Settings",
+                key="reset_saved_settings_btn",
+                help="Clear saved sidebar choices and revert to .env / default settings.",
+            ):
+                clear_ui_settings()
+                for widget_key in _WIDGET_KEYS_TO_RESET:
+                    st.session_state.pop(widget_key, None)
+                st.rerun()
 
         st.divider()
         st.caption(f"Grocery Helper v{__version__}")
@@ -297,6 +391,10 @@ def render_list_selector(config: dict[str, Any]) -> tuple[str | None, GroceryLis
 
     list_by_id = {lst.id: lst for lst in lists}
     option_ids: list[str | None] = [None, *list_by_id.keys()]
+    if "selected_list_id" not in st.session_state:
+        saved_lid = _get_initial_saved_prefs().get("selected_list_id")
+        if saved_lid in option_ids:
+            st.session_state["selected_list_id"] = saved_lid
     if st.session_state.get("selected_list_id") not in option_ids:
         st.session_state["selected_list_id"] = None
 
@@ -329,6 +427,14 @@ def render_list_selector(config: dict[str, Any]) -> tuple[str | None, GroceryLis
             ),
             key="selected_list_id",
         )
+    if resolve_preferences_path() is not None:
+        if "_last_saved_list_id" not in st.session_state:
+            st.session_state["_last_saved_list_id"] = _get_initial_saved_prefs().get(
+                "selected_list_id"
+            )
+        if st.session_state["_last_saved_list_id"] != selected_id:
+            save_ui_settings({"selected_list_id": selected_id})
+            st.session_state["_last_saved_list_id"] = selected_id
     selected_list = list_by_id.get(selected_id) if selected_id else None
     return (selected_list.id if selected_list else None), selected_list
 
@@ -1091,15 +1197,15 @@ def main() -> None:
                 )
             )
 
-        tab_compare, tab_cart, tab_flyers = st.tabs(
-            ["Price Comparison", "Optimised Cart", "🏷️ Weekly Sales & Flyers"]
+        tab_cart, tab_compare, tab_flyers = st.tabs(
+            ["Optimised Cart", "Price Comparison", "🏷️ Weekly Sales & Flyers"]
         )
-
-        with tab_compare:
-            render_price_comparison(cart)
 
         with tab_cart:
             render_optimised_cart(cart, selected_list, config=config)
+
+        with tab_compare:
+            render_price_comparison(cart)
 
         with tab_flyers:
             render_flyers_tab(selected_list, config)
