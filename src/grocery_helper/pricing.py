@@ -469,7 +469,9 @@ class PricingService:
                 )
             else:
                 flipp_tag = "flipp_off"
-            flyer_tag = f"flyers_on:{mb_tag}:{wf_tag}:{flipp_tag}:{self._flyer_only_for_live_stores}"
+            flyer_tag = (
+                f"flyers_on:{mb_tag}:{wf_tag}:{flipp_tag}:{self._flyer_only_for_live_stores}"
+            )
         else:
             flyer_tag = "flyers_off"
         return cache_key(
@@ -552,9 +554,7 @@ class PricingService:
                 self._safe_flyer_prices(self._whole_foods_provider, item, self._store_zip),
             ]
             if use_flipp:
-                tasks.append(
-                    self._safe_flyer_prices(self._flipp_provider, item, self._store_zip)
-                )
+                tasks.append(self._safe_flyer_prices(self._flipp_provider, item, self._store_zip))
             results = await asyncio.gather(*tasks)
             mb_live: list[StorePrice] = results[0]
             wf_live: list[StorePrice] = results[1]

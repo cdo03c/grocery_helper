@@ -691,7 +691,9 @@ class FlippFlyerProvider:
                 return []
 
             if res.status_code != 200:
-                logger.warning("Flipp flyers returned status %s for ZIP %s", res.status_code, z_code)
+                logger.warning(
+                    "Flipp flyers returned status %s for ZIP %s", res.status_code, z_code
+                )
                 return []
 
             try:
@@ -1000,7 +1002,9 @@ class FlippFlyerProvider:
                 return []
 
             if res.status_code != 200:
-                logger.warning("Flipp item search returned status %s for '%s'", res.status_code, q_clean)
+                logger.warning(
+                    "Flipp item search returned status %s for '%s'", res.status_code, q_clean
+                )
                 return []
 
             try:

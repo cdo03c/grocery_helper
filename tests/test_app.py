@@ -9,8 +9,12 @@ APP_PATH = "src/grocery_helper/app.py"
 
 
 @pytest.fixture()
-def at() -> AppTest:
-    """Return a fresh AppTest instance for each test."""
+def at(monkeypatch: pytest.MonkeyPatch) -> AppTest:
+    """Return a fresh AppTest instance forced into offline demo mode."""
+    from grocery_helper.config import settings
+
+    monkeypatch.setattr(settings, "anylist_email", "")
+    monkeypatch.setattr(settings, "anylist_password", "")
     return AppTest.from_file(APP_PATH, default_timeout=25)
 
 

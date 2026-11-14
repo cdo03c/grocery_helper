@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added sidebar live flyer controls and a **🏷️ Weekly Sales & Flyers** tab in Streamlit for matching deals to your grocery list and searching/filtering all active weekly on-sale items.
   - Added the `grocery-helper flyers` CLI subcommand and `--live-flyers`, `--advertised-only`, `--wf-store-id`, `--no-prime`, `--no-flipp`, and `--flipp-merchants` flags to `optimise`.
 
+### Fixed
+- **Live AnyList Authentication & Protobuf Sync (`grocery_helper.anylist_client`)**:
+  - Replaced the legacy `/data/users/login` placeholder (which returned HTTP `403` and was misreported as an invalid password) with AnyList's real multipart `POST /auth/token` login and `/auth/token/refresh` token-renewal flow.
+  - Added pure-Python Protocol Buffer serialization/deserialization for `POST /data/user-data/get` (`PBUserDataResponse`) and multipart `operations` uploads to `POST /data/shopping-lists/update` (`PBListOperationList`).
+
 ---
 
 ## [0.1.0] - 2026-11-14

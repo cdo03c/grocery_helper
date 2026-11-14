@@ -67,9 +67,9 @@ Defines the core domain entities:
 - `OptimizedCart`: The output of basket optimization, including item-to-store mappings, total basket cost, potential savings, and single-store comparison totals.
 
 ### `grocery_helper.anylist_client`
-Async HTTP client designed around AnyList's reverse-engineered `/data/` endpoints:
+Async HTTP client built around AnyList's `/auth/token` and protobuf `/data/` API:
 - Generates required `X-AnyLeaf-API-Version: 3` and device UUID `X-AnyLeaf-Client-Identifier` headers.
-- Handles user authentication, session token retention, and shopping list CRUD.
+- Handles multipart `/auth/token` authentication, JWT `sub` user-ID extraction, automatic `/auth/token/refresh` retries, protobuf `/data/user-data/get` decoding, and multipart `operations` uploads to `/data/shopping-lists/update`.
 - Seamless fallback to `demo_mode` with sample lists (*"Weekly Shop"*, *"Party Supplies"*, *"Brunch & Coffee"*).
 - `export_split_lists()` generates store-specific sub-lists back in AnyList.
 

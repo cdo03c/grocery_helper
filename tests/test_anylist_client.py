@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import json
+
 import httpx
 import pytest
 
@@ -9,8 +12,44 @@ from grocery_helper.anylist_client import (
     AnyListAPIError,
     AnyListAuthError,
     AnyListClient,
+    _encode_field_bytes,
+    _encode_field_str,
+    _encode_field_varint,
 )
 from grocery_helper.models import GroceryItem, Unit
+
+
+def _make_jwt(sub: str = "user_abc") -> str:
+    """Build an unsigned test JWT carrying a ``sub`` claim."""
+    header = base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').rstrip(b"=").decode()
+    payload = base64.urlsafe_b64encode(json.dumps({"sub": sub}).encode()).rstrip(b"=").decode()
+    return f"{header}.{payload}.sig"
+
+
+def _build_pb_user_data(
+    list_id: str,
+    list_name: str,
+    items: list[tuple[str, str, str | None, str | None, str | None, bool]],
+) -> bytes:
+    """Encode a minimal ``PBUserDataResponse`` protobuf payload for tests."""
+    encoded_items = b""
+    for item_id, name, qty_amt, qty_unit, category, checked in items:
+        item_pb = _encode_field_str(1, item_id) + _encode_field_str(4, name)
+        if checked:
+            item_pb += _encode_field_varint(6, 1)
+        if category is not None:
+            item_pb += _encode_field_str(11, category)
+        if qty_amt is not None or qty_unit is not None:
+            qty_pb = _encode_field_str(1, qty_amt) + _encode_field_str(2, qty_unit)
+            item_pb += _encode_field_bytes(21, qty_pb)
+        encoded_items += _encode_field_bytes(4, item_pb)
+
+    shopping_list_pb = (
+        _encode_field_str(1, list_id) + _encode_field_str(3, list_name) + encoded_items
+    )
+    lists_resp_pb = _encode_field_bytes(1, shopping_list_pb)
+    return _encode_field_bytes(1, lists_resp_pb)
+
 
 # ---------------------------------------------------------------------------
 # Exception classes
@@ -130,29 +169,55 @@ class TestAuthenticate:
 
     @pytest.mark.asyncio
     async def test_authenticate_success_with_mock_http(self) -> None:
+        token = _make_jwt("user_123")
         async with AnyListClient(email="test@example.com", password="pw") as client:
             assert client._http is not None
 
             def mock_handler(request: httpx.Request) -> httpx.Response:
-                assert request.url.path == "/data/users/login"
-                return httpx.Response(200, json={"token": "live_token_xyz"})
+                assert request.url.path == "/auth/token"
+                assert "multipart/form-data" in request.headers.get("Content-Type", "")
+                body = request.content.decode("utf-8", errors="replace")
+                assert "test@example.com" in body
+                assert "pw" in body
+                return httpx.Response(
+                    200,
+                    json={
+                        "access_token": token,
+                        "refresh_token": "refresh_tok_xyz",
+                    },
+                )
 
             client._http._transport = httpx.MockTransport(mock_handler)
             await client.authenticate()
             assert client.is_authenticated is True
-            assert client._session_token == "live_token_xyz"
-            assert "Bearer live_token_xyz" in client._http.headers["Authorization"]
+            assert client._session_token == token
+            assert client._refresh_token == "refresh_tok_xyz"
+            assert client._user_id == "user_123"
+            assert f"Bearer {token}" in client._http.headers["Authorization"]
 
     @pytest.mark.asyncio
     async def test_authenticate_invalid_credentials_raises_auth_error(self) -> None:
         async with AnyListClient(email="bad@example.com", password="bad") as client:
             assert client._http is not None
 
-            def mock_handler(_: httpx.Request) -> httpx.Response:
+            def mock_handler(request: httpx.Request) -> httpx.Response:
+                assert request.url.path == "/auth/token"
                 return httpx.Response(401, json={"error": "unauthorized"})
 
             client._http._transport = httpx.MockTransport(mock_handler)
             with pytest.raises(AnyListAuthError, match="Invalid"):
+                await client.authenticate()
+
+    @pytest.mark.asyncio
+    async def test_authenticate_forbidden_raises_api_error(self) -> None:
+        async with AnyListClient(email="user@example.com", password="pw") as client:
+            assert client._http is not None
+
+            def mock_handler(_: httpx.Request) -> httpx.Response:
+                return httpx.Response(403, text="Forbidden")
+
+            client._http._transport = httpx.MockTransport(mock_handler)
+            with pytest.raises(AnyListAPIError, match="status 403"):
                 await client.authenticate()
 
     @pytest.mark.asyncio
@@ -290,14 +355,50 @@ class TestDemoModeOperations:
 
 class TestHTTPOperations:
     @pytest.mark.asyncio
-    async def test_get_lists_parses_json(self) -> None:
+    async def test_get_lists_decodes_protobuf(self) -> None:
+        token = _make_jwt("user_proto")
+        pb_payload = _build_pb_user_data(
+            "live_list_pb",
+            "Live PB List",
+            [("item_pb_1", "Oat Milk", "2", "carton", "Dairy", True)],
+        )
         async with AnyListClient(email="user@test.com", password="pw") as client:
             assert client._http is not None
 
             def handler(request: httpx.Request) -> httpx.Response:
-                if request.url.path == "/data/users/login":
-                    return httpx.Response(200, json={"token": "test_tok"})
-                if request.url.path == "/data/shopping-lists/get":
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
+                if request.url.path == "/data/user-data/get":
+                    return httpx.Response(
+                        200,
+                        content=pb_payload,
+                        headers={"content-type": "application/octet-stream"},
+                    )
+                return httpx.Response(404)
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+            lists = await client.get_lists()
+
+            assert len(lists) == 1
+            assert lists[0].id == "live_list_pb"
+            assert lists[0].name == "Live PB List"
+            assert len(lists[0].items) == 1
+            assert lists[0].items[0].name == "Oat Milk"
+            assert lists[0].items[0].quantity == 2.0
+            assert lists[0].items[0].category == "Dairy"
+            assert lists[0].items[0].checked is True
+
+    @pytest.mark.asyncio
+    async def test_get_lists_parses_json_fallback(self) -> None:
+        token = _make_jwt()
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
+                if request.url.path == "/data/user-data/get":
                     return httpx.Response(
                         200,
                         json={
@@ -330,31 +431,89 @@ class TestHTTPOperations:
             assert lists[0].items[0].name == "Almond Milk"
 
     @pytest.mark.asyncio
-    async def test_crud_endpoints(self) -> None:
+    async def test_get_lists_refreshes_expired_token_on_401(self) -> None:
+        old_token = _make_jwt("user_1")
+        new_token = _make_jwt("user_1") + "_refreshed"
+        pb_payload = _build_pb_user_data("list_refreshed", "Refreshed", [])
+        calls: list[str] = []
         async with AnyListClient(email="user@test.com", password="pw") as client:
             assert client._http is not None
 
             def handler(request: httpx.Request) -> httpx.Response:
-                if request.url.path == "/data/users/login":
-                    return httpx.Response(200, json={"token": "test_tok"})
-                return httpx.Response(200, json={"status": "ok"})
+                calls.append(request.url.path)
+                if request.url.path == "/auth/token":
+                    return httpx.Response(
+                        200,
+                        json={
+                            "access_token": old_token,
+                            "refresh_token": "refresh_1",
+                        },
+                    )
+                if request.url.path == "/auth/token/refresh":
+                    body = request.content.decode("utf-8", errors="replace")
+                    assert "refresh_1" in body
+                    return httpx.Response(
+                        200,
+                        json={
+                            "access_token": new_token,
+                            "refresh_token": "refresh_2",
+                        },
+                    )
+                if request.url.path == "/data/user-data/get":
+                    if calls.count("/data/user-data/get") == 1:
+                        return httpx.Response(401, text="Expired")
+                    assert f"Bearer {new_token}" == request.headers["Authorization"]
+                    return httpx.Response(200, content=pb_payload)
+                return httpx.Response(404)
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+            lists = await client.get_lists()
+            assert [lst.id for lst in lists] == ["list_refreshed"]
+            assert client._session_token == new_token
+            assert client._refresh_token == "refresh_2"
+
+    @pytest.mark.asyncio
+    async def test_crud_endpoints(self) -> None:
+        token = _make_jwt("user_crud")
+        uploaded_bodies: list[bytes] = []
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
+                if request.url.path == "/data/shopping-lists/update":
+                    assert "multipart/form-data" in request.headers.get("Content-Type", "")
+                    uploaded_bodies.append(request.content)
+                    return httpx.Response(200, content=b"")
+                return httpx.Response(404)
 
             client._http._transport = httpx.MockTransport(handler)
             await client.authenticate()
 
-            item = GroceryItem(id="item_live", name="Coffee")
+            item = GroceryItem(id="item_live", name="Coffee", quantity=2, category="Beverages")
             await client.add_item("list_1", item)
             await client.update_item("list_1", item)
             await client.remove_item("list_1", "item_live")
+            new_list = await client.create_list("Party Supplies")
+
+            assert new_list.name == "Party Supplies"
+            assert len(uploaded_bodies) == 4
+            assert b"add-shopping-list-item" in uploaded_bodies[0]
+            assert b"set-list-item-name" in uploaded_bodies[1]
+            assert b"remove-shopping-list-item" in uploaded_bodies[2]
+            assert b"new-shopping-list" in uploaded_bodies[3]
 
     @pytest.mark.asyncio
     async def test_crud_unauthorized_raises_auth_error(self) -> None:
+        token = _make_jwt()
         async with AnyListClient(email="user@test.com", password="pw") as client:
             assert client._http is not None
 
             def handler(request: httpx.Request) -> httpx.Response:
-                if request.url.path == "/data/users/login":
-                    return httpx.Response(200, json={"token": "test_tok"})
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
                 return httpx.Response(401, text="Unauthorized")
 
             client._http._transport = httpx.MockTransport(handler)
@@ -372,12 +531,13 @@ class TestHTTPOperations:
 
     @pytest.mark.asyncio
     async def test_crud_network_error_raises_api_error(self) -> None:
+        token = _make_jwt()
         async with AnyListClient(email="user@test.com", password="pw") as client:
             assert client._http is not None
 
             def handler(request: httpx.Request) -> httpx.Response:
-                if request.url.path == "/data/users/login":
-                    return httpx.Response(200, json={"token": "test_tok"})
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
                 raise httpx.ConnectError("connection lost", request=request)
 
             client._http._transport = httpx.MockTransport(handler)
@@ -389,12 +549,13 @@ class TestHTTPOperations:
 
     @pytest.mark.asyncio
     async def test_get_lists_preserves_zero_quantity_and_unit(self) -> None:
+        token = _make_jwt()
         async with AnyListClient(email="user@test.com", password="pw") as client:
             assert client._http is not None
 
             def handler(request: httpx.Request) -> httpx.Response:
-                if request.url.path == "/data/users/login":
-                    return httpx.Response(200, json={"token": "test_tok"})
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
                 return httpx.Response(
                     200,
                     json={
