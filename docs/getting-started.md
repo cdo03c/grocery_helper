@@ -45,6 +45,12 @@ PRICE_CACHE_TTL_SECONDS=3600
 # ── Kroger Developer API (Optional live data) ─────────────────────────────────
 KROGER_CLIENT_ID=
 KROGER_CLIENT_SECRET=
+
+# ── Weekly Flyer Sources (Market Basket, Whole Foods & Flipp) ───────────────
+WHOLE_FOODS_STORE_ID=10010
+WHOLE_FOODS_PRIME=true
+ENABLE_LIVE_FLYERS=false
+ENABLE_FLIPP=true
 ```
 
 !!! tip "Demo Mode Works Out of the Box"
@@ -76,5 +82,11 @@ To optimize a list directly in the terminal:
 
 ```bash
 uv run grocery-helper optimise list_001 --demo
+```
+
+To list live weekly on-sale items from Market Basket, Whole Foods, and nearby stores in your ZIP code:
+
+```bash
+uv run grocery-helper flyers --demo --list-id list_001 --zip 02139
 ```
 

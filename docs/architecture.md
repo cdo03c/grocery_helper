@@ -20,9 +20,10 @@ flowchart TD
         CACHE[("In-Memory TTL Cache<br/>utils.py")]
     end
 
-    subgraph Providers["3. Store Pricing Providers"]
+    subgraph Providers["3. Store Pricing & Flyer Providers"]
+        FP["Weekly Flyer Providers<br/>(Market Basket, Whole Foods, Flipp)"]
         KP["KrogerPricingProvider<br/>(OAuth2 Live Store API)"]
-        MP["MockPricingProvider<br/>(ALDI, TJ's, Kroger, Whole Foods)"]
+        MP["MockPricingProvider<br/>(ALDI, MB, TJ's, Kroger, WF)"]
     end
 
     subgraph Optim["4. Basket Optimization"]
@@ -40,8 +41,10 @@ flowchart TD
     AC --> PS
     NM --> PS
     PS <--> CACHE
+    PS --> FP
     PS --> KP
     PS --> MP
+    FP --> OPT
     KP --> OPT
     MP --> OPT
     OPT --> ST
@@ -58,8 +61,9 @@ flowchart TD
 Defines the core domain entities:
 - `GroceryItem`: Product identifier, display name, quantity, measurement unit, category, and checked status.
 - `GroceryList`: List container with creation and modification timestamps.
-- `StorePrice`: Pricing data per store including regular and promotional sale price.
-- `PriceComparison`: Cross-store price matrix for a single item.
+- `StorePrice`: Pricing data per store including regular and promotional sale price, plus optional `is_live`, `matched_product_name`, and `deal_details` metadata for live flyer overlays.
+- `FlyerDeal`: Advertised weekly flyer item (`store_name`, `product_name`, `regular_price`, `sale_price`, `prime_price`, `unit`, `deal_text`, `valid_from`, `valid_to`, and `effective_sale_price()`).
+- `PriceComparison`: Cross-store price matrix for a single item, with unit normalization (`normalized_price()`).
 - `OptimizedCart`: The output of basket optimization, including item-to-store mappings, total basket cost, potential savings, and single-store comparison totals.
 
 ### `grocery_helper.anylist_client`
@@ -69,14 +73,21 @@ Async HTTP client designed around AnyList's reverse-engineered `/data/` endpoint
 - Seamless fallback to `demo_mode` with sample lists (*"Weekly Shop"*, *"Party Supplies"*, *"Brunch & Coffee"*).
 - `export_split_lists()` generates store-specific sub-lists back in AnyList.
 
+### `grocery_helper.flyers`
+- **`BaseFlyerProvider`**: Protocol defining `fetch_flyer()` and `get_prices(item, store_zip)`.
+- **`MarketBasketFlyerProvider`**: Fetches active Market Basket weekly circulars from `/wp-json/mb/v1/weekly-flyer` and computes sale/regular prices and savings.
+- **`WholeFoodsFlyerProvider`**: Extracts store-specific promotions from Whole Foods Market `__NEXT_DATA__` SSR HTML (`sales-flyer?store-id=...`) with support for Amazon Prime pricing and percentage-off promotions.
+- **`FlippFlyerProvider`**: Queries Flipp (`backflipp.wishabi.com/flipp`) by ZIP code to discover local grocery circulars and search advertised items across chains.
+- **`match_flyer_deals()`**: Token-similarity matcher linking grocery list entries to active circular titles while avoiding substring false positives (e.g., `"milk"` vs. `"buttermilk"`).
+
 ### `grocery_helper.pricing`
 - **`BasePricingProvider`**: Protocol specifying `async def get_prices(item, store_zip) -> list[StorePrice]`.
-- **`MockPricingProvider`**: Generates deterministic prices with store price profiles (ALDI, Trader Joe's, Kroger, Whole Foods) based on catalog matching or name hashes.
+- **`MockPricingProvider`**: Generates deterministic baseline prices with store profiles (**ALDI**, **Market Basket**, **Trader Joe's**, **Kroger**, **Whole Foods**).
 - **`KrogerPricingProvider`**: Authenticates with Kroger Developer OAuth2, resolves nearest store location by ZIP code, and retrieves live SKU prices.
 - **`PricingService`**:
-  - In-memory TTL caching with cache keys formatted as `cache_key(item.name, zip)`.
-  - Overlays live Kroger prices onto regional store matrices.
-  - Computes unconstrained split basket and evaluates `max_stores` combinations using subset cover analysis.
+  - Thread-safe TTL caching keyed by provider, flyer settings, item name, unit, and ZIP code.
+  - Pre-warms and overlays live flyer prices with clear precedence: **Flipp** (generic local chains) → store-specific **Market Basket** & **Whole Foods** circulars (plus optional `flyer_only_for_live_stores=True` mode).
+  - Computes unconstrained split baskets and evaluates `max_stores` combinations using subset cover analysis.
 
 ### `grocery_helper.matcher`
 Normalizes AnyList user inputs:

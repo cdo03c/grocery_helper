@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Live Weekly Flyers & Generic Aggregator (`grocery_helper.flyers`)**:
+  - Added `MarketBasketFlyerProvider` fetching weekly circular JSON from `shopmarketbasket.com/wp-json/mb/v1/weekly-flyer` with multi-buy, per-lb, and savings parsing.
+  - Added `WholeFoodsFlyerProvider` extracting store-specific weekly sales and Prime member pricing from `wholefoodsmarket.com/sales-flyer?store-id=<id>`.
+  - Added `FlippFlyerProvider` (`backflipp.wishabi.com/flipp`) for generic ZIP-code circular discovery and cross-store sale item search (e.g. ALDI, Star Market, Shaw's, Stop & Shop, Hannaford, Wegmans, Big Y, Costco, Target, Walmart).
+  - Added `FlyerDeal` model and extended `StorePrice` with `is_live`, `matched_product_name`, and `deal_details`.
+- **Pricing, UI & CLI Support (`grocery_helper.pricing`, `grocery_helper.app`, `grocery_helper.cli`)**:
+  - Added `"Market Basket"` to `MockPricingProvider.STORE_PROFILES`.
+  - Updated `PricingService` to pre-warm and overlay Flipp, Market Basket, and Whole Foods live flyers (with `enable_live_flyers`, `enable_flipp`, `flyer_only_for_live_stores`, `whole_foods_store_id`, `whole_foods_prime`, and `flipp_merchants`).
+  - Added sidebar live flyer controls and a **🏷️ Weekly Sales & Flyers** tab in Streamlit for matching deals to your grocery list and searching/filtering all active weekly on-sale items.
+  - Added the `grocery-helper flyers` CLI subcommand and `--live-flyers`, `--advertised-only`, `--wf-store-id`, `--no-prime`, `--no-flipp`, and `--flipp-merchants` flags to `optimise`.
+
+---
+
 ## [0.1.0] - 2026-11-14
 
 ### Fixed
