@@ -7,7 +7,7 @@ The `grocery-helper` CLI allows automated, headless execution for shell scripts,
 ## Subcommands Overview
 
 ```bash
-grocery-helper [-h] {serve,optimise} ...
+grocery-helper [-h] {serve,optimise,flyers} ...
 ```
 
 ---
@@ -47,7 +47,35 @@ grocery-helper optimise <list_id> [OPTIONS]
 - `--zip ZIP`: Specify store ZIP code for local pricing (default: from `.env` or `90210`).
 - `--max-stores N`: Limit the shopping route to at most $N$ stores (e.g. `1` or `2`).
 - `--stores [STORES ...]`: Space-separated list of store names to consider.
+- `--live-flyers`: Overlay live weekly advertised sale prices from Market Basket, Whole Foods, and Flipp.
+- `--advertised-only`: For Market Basket and Whole Foods, use only advertised weekly flyer items instead of baseline estimates.
+- `--wf-store-id ID`: Whole Foods store ID for weekly sales flyer lookup (default: `10010`).
+- `--no-prime`: Use regular Whole Foods sale prices instead of Prime member prices.
+- `--no-flipp`: Disable generic nearby store circular lookups via Flipp when `--live-flyers` is set.
+- `--flipp-merchants [STORES ...]`: Restrict Flipp lookup to specific store names (e.g. `Hannaford "Star Market" ALDI`).
+- `--open-prices` / `--no-open-prices`: Enable or disable crowdsourced Open Prices shelf-price lookups (`prices.openfoodfacts.org`).
 - `--json`: Output raw JSON data instead of formatted terminal text.
+
+---
+
+## `grocery-helper flyers`
+
+List active weekly advertised on-sale items from Market Basket, Whole Foods, and nearby stores via Flipp.
+
+```bash
+grocery-helper flyers [OPTIONS]
+```
+
+### Options:
+- `--store {all,mb,wf,flipp}`: Flyer source(s) to fetch (`all` by default; `mb` Market Basket; `wf` Whole Foods; `flipp` all nearby stores by ZIP).
+- `--zip ZIP`: ZIP/postal code for Flipp circular discovery (default: from `.env` or `02139`).
+- `--merchants [STORES ...]`: Optional Flipp merchant allow-list (e.g. `"Star Market" Hannaford ALDI`).
+- `--wf-store-id ID`: Whole Foods store ID (default: `10010`).
+- `--no-prime`: Show regular Whole Foods sale prices instead of Prime member prices.
+- `--search KEYWORD`: Filter on-sale items by keyword (product name, brand, description, or department).
+- `--list-id LIST_ID`: Highlight weekly flyer deals matching items on an AnyList shopping list.
+- `--demo`: Load `--list-id` from built-in sample lists.
+- `--json`: Output raw JSON instead of a formatted table.
 
 ---
 
@@ -66,6 +94,20 @@ grocery-helper optimise list_001 --demo --max-stores 2
 ### Compare Only ALDI and Trader Joe's
 ```bash
 grocery-helper optimise list_001 --demo --stores ALDI "Trader Joe's"
+```
+
+### Optimize with Live Weekly Flyers (Market Basket, Whole Foods & Flipp)
+```bash
+grocery-helper optimise list_001 --demo --live-flyers --zip 02139 --wf-store-id 10010
+```
+
+### List All Weekly On-Sale Items & Match Your List
+```bash
+# Market Basket + Whole Foods + nearby Flipp stores matched against demo list_001
+grocery-helper flyers --demo --list-id list_001 --zip 02139
+
+# Search Flipp deals at specific local chains
+grocery-helper flyers --store flipp --zip 02139 --merchants Hannaford "Star Market" ALDI --search chicken
 ```
 
 ### Output JSON for Automation Scripts

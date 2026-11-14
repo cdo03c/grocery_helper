@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from grocery_helper.cli import build_parser, cmd_optimise, cmd_serve, main
+from grocery_helper.cli import build_parser, cmd_flyers, cmd_optimise, cmd_serve, main
 
 # ---------------------------------------------------------------------------
 # build_parser
@@ -92,6 +92,23 @@ class TestCmdOptimise:
             cmd_optimise(args)
         assert exc_info.value.code == 1
 
+    def test_optimise_max_stores_text_output_shows_assigned_store(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        args = build_parser().parse_args(["optimise", "list_001", "--demo", "--max-stores", "1"])
+        cmd_optimise(args)
+        out = capsys.readouterr().out
+        # Best single store for list_001 is ALDI; every assigned item row should reflect ALDI
+        assert "Assigned Store" in out
+        assert "ALDI" in out
+        assert "Whole Foods" not in out.split("Single-Store Basket Totals")[0]
+
+    def test_optimise_invalid_max_stores_exits(self) -> None:
+        args = build_parser().parse_args(["optimise", "list_001", "--demo", "--max-stores", "0"])
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_optimise(args)
+        assert exc_info.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # cmd_serve
@@ -116,6 +133,13 @@ class TestCmdServe:
             _, kwargs = mock_run.call_args
             assert kwargs.get("check") is True
 
+    def test_missing_streamlit_exits(self) -> None:
+        args = build_parser().parse_args(["serve"])
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            with pytest.raises(SystemExit) as exc_info:
+                cmd_serve(args)
+            assert exc_info.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # main
@@ -134,3 +158,89 @@ class TestMain:
             with patch("grocery_helper.cli.cmd_serve") as mock_serve:
                 main()
             mock_serve.assert_called_once()
+
+    def test_optimise_live_flyer_flags_parsed(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "optimise",
+                "list_001",
+                "--demo",
+                "--live-flyers",
+                "--advertised-only",
+                "--wf-store-id",
+                "10380",
+                "--no-prime",
+            ]
+        )
+        assert args.live_flyers is True
+        assert args.advertised_only is True
+        assert args.wf_store_id == "10380"
+        assert args.no_prime is True
+
+    def test_flyers_subcommand_json_output(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from decimal import Decimal
+        from unittest.mock import AsyncMock
+
+        from grocery_helper.models import FlyerDeal, Unit
+
+        mb_deals = [
+            FlyerDeal(
+                store_name="Market Basket",
+                product_name="Market Basket Milk",
+                sale_price=Decimal("2.50"),
+                regular_price=Decimal("3.99"),
+                unit=Unit.GALLON,
+            )
+        ]
+        wf_deals = [
+            FlyerDeal(
+                store_name="Whole Foods",
+                product_name="Organic Bananas",
+                sale_price=Decimal("0.69"),
+                prime_price=Decimal("0.49"),
+                unit=Unit.LB,
+            )
+        ]
+        flipp_deals = [
+            FlyerDeal(
+                store_name="Hannaford",
+                product_name="Store Milk",
+                sale_price=Decimal("2.99"),
+                unit=Unit.GALLON,
+            )
+        ]
+        with (
+            patch("grocery_helper.cli.MarketBasketFlyerProvider") as mock_mb_cls,
+            patch("grocery_helper.cli.WholeFoodsFlyerProvider") as mock_wf_cls,
+            patch("grocery_helper.cli.FlippFlyerProvider") as mock_flipp_cls,
+            patch(
+                "sys.argv",
+                ["grocery-helper", "flyers", "--demo", "--list-id", "list_001", "--json"],
+            ),
+        ):
+            mock_mb_cls.return_value.fetch_flyer = AsyncMock(return_value=mb_deals)
+            mock_wf_cls.return_value.fetch_flyer = AsyncMock(return_value=wf_deals)
+            mock_flipp_cls.return_value.fetch_flyer = AsyncMock(return_value=flipp_deals)
+            main()
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["count"] == 3
+        assert len(data["deals"]) == 3
+        assert any(m["store"] == "Market Basket" for m in data["list_matches"])
+        assert any(m["store"] == "Hannaford" for m in data["list_matches"])
+
+    def test_flyers_flipp_only_args(self) -> None:
+        args = build_parser().parse_args(
+            ["flyers", "--store", "flipp", "--zip", "02139", "--merchants", "Hannaford", "ALDI"]
+        )
+        assert args.store == "flipp"
+        assert args.store_zip == "02139"
+        assert args.merchants == ["Hannaford", "ALDI"]
+
+    def test_flyers_dispatch_callable(self) -> None:
+        with patch("grocery_helper.cli.cmd_flyers") as mock_flyers:
+            with patch("sys.argv", ["grocery-helper", "flyers"]):
+                main()
+            mock_flyers.assert_called_once()
+        assert callable(cmd_flyers)

@@ -10,6 +10,7 @@ import pytest
 
 from grocery_helper.utils import (
     cache_key,
+    clear_price_cache,
     configure_logging,
     format_currency,
     format_savings,
@@ -72,6 +73,10 @@ class TestTruncate:
         assert len(result) == 10
         assert result.endswith("…")
 
+    def test_zero_max_len(self) -> None:
+        assert truncate("Hello", max_len=0) == ""
+        assert truncate("Hello", max_len=-5) == ""
+
 
 class TestCacheKey:
     def test_normalises(self) -> None:
@@ -104,6 +109,12 @@ class TestCacheHelpers:
         set_cached_price(key, "first")
         set_cached_price(key, "second")
         assert get_cached_price(key) == "second"
+
+    def test_clear_price_cache(self) -> None:
+        key = cache_key("clear", "test")
+        set_cached_price(key, "val")
+        clear_price_cache()
+        assert get_cached_price(key) is None
 
 
 # ---------------------------------------------------------------------------

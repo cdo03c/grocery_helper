@@ -12,19 +12,23 @@ A Python library, CLI, and Streamlit application that integrates with **AnyList*
 ## 🌟 Key Features
 
 - **AnyList Integration**: Pulls shopping lists and items directly from your AnyList account, with zero-configuration offline demo mode for quick testing.
-- **Multi-Store Pricing**:
+- **Multi-Store Pricing & Live Weekly Flyers**:
+  - **Live Weekly Sale Circulars**: Fetches real-time advertised weekly sales from **Market Basket** (`/wp-json/mb/v1/weekly-flyer`), **Whole Foods Market** (store-specific `/sales-flyer` with Amazon Prime pricing), and nearby grocery chains for any ZIP code via **Flipp** (e.g. ALDI, Star Market, Shaw's, Stop & Shop, Hannaford, Wegmans, Big Y, Costco, Target, Walmart).
+  - **Crowdsourced Shelf Prices (Open Prices)**: Optional integration with Open Food Facts' **Open Prices** (`prices.openfoodfacts.org`) for receipt- and shelf-tag-verified retail prices on non-sale everyday items.
   - **Live Kroger Developer API**: Real-time product search, nearest store locator, and live regular/promotional pricing.
-  - **Regional Pricing Providers**: Realistic pricing models across **ALDI**, **Trader Joe's**, **Kroger**, and **Whole Foods**.
+  - **Regional Baseline Pricing Providers**: Deterministic baseline pricing models across **ALDI**, **Market Basket**, **Trader Joe's**, **Kroger**, and **Whole Foods**.
+- **Weekly On-Sale Item Browser & List Matcher**:
+  - Browse and filter all active weekly sale items across stores, or automatically match weekly circular deals against items on your grocery list.
 - **Basket & Route Optimization**:
   - **Cheapest Basket**: Minimizes total grocery spend across all items.
   - **Constrained Stops (`max_stores`)**: Limit shopping stops to $N$ stores (e.g. at most 2 stores) to balance savings against driving convenience.
   - **Store Filtering (`allowed_stores`)**: Exclude grocers you don't frequent.
   - **Single-Store Evaluation**: Calculates the best single-store alternative and cost difference.
-- **Smart Item Normalization**: Automatic quantity/unit extraction (e.g. *"Honeycrisp Apples 3 lbs"*) and token fuzzy matching to reconcile free-form AnyList names with store SKUs.
-- **AnyList Sub-List Export**: Automatically export your optimized route into store-specific lists (e.g. *"Weekly Shop (ALDI)"* and *"Weekly Shop (Kroger)"*) in AnyList.
+- **Smart Item Normalization**: Automatic quantity/unit extraction (e.g. *"Honeycrisp Apples 3 lbs"*) and token fuzzy matching to reconcile free-form AnyList names with store SKUs and flyer deals.
+- **AnyList Sync & Sub-List Export**: Update your active AnyList items in-place with assigned stores, prices, categories, and quantities, or automatically export store-specific lists (e.g. *"Weekly Shop (ALDI)"* and *"Weekly Shop (Market Basket)"*) in AnyList.
 - **Dual Interfaces**:
-  - Interactive **Streamlit Web UI** (`grocery-helper serve`).
-  - Scriptable **CLI** (`grocery-helper optimise <list_id>`) with text and JSON outputs.
+  - Interactive **Streamlit Web UI** (`grocery-helper serve`) with a **🏷️ Weekly Sales & Flyers** tab.
+  - Scriptable **CLI** (`grocery-helper optimise <list_id>` and `grocery-helper flyers`) with text and JSON outputs.
 
 ---
 
@@ -44,9 +48,10 @@ flowchart TD
         CACHE[("In-Memory TTL Cache<br/>utils.py")]
     end
 
-    subgraph Providers["Pricing Providers"]
+    subgraph Providers["Pricing & Flyer Providers"]
+        FP["Live Weekly Flyers<br/>(Market Basket, Whole Foods, Flipp)"]
         KP["KrogerPricingProvider<br/>(OAuth2 Live API)"]
-        MP["MockPricingProvider<br/>(ALDI, TJ's, Whole Foods)"]
+        MP["MockPricingProvider<br/>(ALDI, MB, TJ's, Kroger, WF)"]
     end
 
     subgraph Optim["Basket Optimization"]
@@ -64,8 +69,10 @@ flowchart TD
     AC --> PS
     NM --> PS
     PS <--> CACHE
+    PS --> FP
     PS --> KP
     PS --> MP
+    FP --> OPT
     KP --> OPT
     MP --> OPT
     OPT --> ST
@@ -92,8 +99,11 @@ grocery_helper/
 │       ├── app.py               # Streamlit interactive web application
 │       ├── cli.py               # Command-line interface
 │       ├── config.py            # Pydantic Settings configuration
+│       ├── flyers.py            # Market Basket, Whole Foods & Flipp flyer providers
 │       ├── matcher.py           # Quantity parser and fuzzy string matcher
 │       ├── models.py            # Pydantic data models
+│       ├── open_prices.py       # Open Food Facts Open Prices API client
+│       ├── preferences.py       # Non-secret persistent UI settings store
 │       ├── pricing.py           # Pricing service, providers, and route optimizer
 │       └── utils.py             # Formatting, TTL caching, logging
 ├── tests/                       # Comprehensive test suite (unit + AppTest)
@@ -152,6 +162,15 @@ grocery-helper optimise list_001 --zip 90210
 
 # Output raw JSON for automation scripts
 grocery-helper optimise list_001 --demo --json
+
+# Overlay live weekly flyers and Open Prices crowdsourced shelf prices
+grocery-helper optimise list_001 --demo --live-flyers --open-prices --zip 02139
+
+# Browse all live weekly on-sale items & list matches
+grocery-helper flyers --demo --list-id list_001 --zip 02139
+
+# Filter Flipp weekly circulars for specific nearby stores and keywords
+grocery-helper flyers --store flipp --zip 02139 --merchants Hannaford "Star Market" ALDI --search chicken
 ```
 
 ---
@@ -165,9 +184,22 @@ Settings can be specified in `.env` or passed as environment variables:
 | `ANYLIST_EMAIL` | AnyList account email | `""` |
 | `ANYLIST_PASSWORD` | AnyList account password | `""` |
 | `DEFAULT_STORE_ZIP` | Default ZIP code for grocer lookups | `""` |
+| `DEFAULT_ALLOWED_STORES` | Comma-separated default stores in Allowed Stores | `""` |
+| `DEFAULT_MAX_STORES` | Optional default maximum store stops | `""` |
+| `ADVERTISED_ONLY` | Restrict live-flyer stores to advertised deals only | `false` |
+| `UI_SETTINGS_FILE` | Path to saved non-secret UI preferences JSON | `~/.config/grocery_helper/ui_settings.json` |
 | `PRICE_CACHE_TTL_SECONDS` | In-memory price cache duration | `3600` |
 | `KROGER_CLIENT_ID` | Kroger Developer API Client ID (optional live data) | `""` |
 | `KROGER_CLIENT_SECRET` | Kroger Developer API Client Secret | `""` |
+| `ENABLE_LIVE_FLYERS` | Overlay live weekly sale flyers during pricing | `false` |
+| `ENABLE_FLIPP` | Include nearby store circulars via Flipp when live flyers are enabled | `true` |
+| `ENABLE_OPEN_PRICES` | Overlay crowdsourced retail shelf prices from Open Prices | `false` |
+| `OPEN_PRICES_BASE_URL` | Open Food Facts Open Prices REST API base URL | `https://prices.openfoodfacts.org/api/v1` |
+| `WHOLE_FOODS_STORE_ID` | Whole Foods store ID for local weekly sales flyer | `10010` |
+| `WHOLE_FOODS_PRIME` | Apply Prime member pricing for Whole Foods deals | `true` |
+| `MARKET_BASKET_FLYER_URL` | Market Basket weekly flyer JSON endpoint | `https://www.shopmarketbasket.com/wp-json/mb/v1/weekly-flyer` |
+| `WHOLE_FOODS_BASE_URL` | Whole Foods Market base URL | `https://www.wholefoodsmarket.com` |
+| `FLIPP_BASE_URL` | Flipp weekly flyer & item search base URL | `https://backflipp.wishabi.com/flipp` |
 | `APP_TITLE` | Streamlit browser tab title | `Grocery Helper` |
 | `DEBUG` | Enable verbose debug logging | `false` |
 

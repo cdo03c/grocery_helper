@@ -2,14 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [main, feature/*]
   pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    name: Lint, Type Check & Test
+    name: Lint, Type Check & Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,13 +29,13 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync --locked --all-extras --all-groups
 
       - name: Check code formatting
         run: uv run ruff format --check .
@@ -38,4 +48,7 @@ jobs:
 
       - name: Run tests with coverage
         run: uv run pytest
+
+      - name: Build docs (strict)
+        run: uv run mkdocs build --strict -d /tmp/grocery_helper_docs_check && rm -rf /tmp/grocery_helper_docs_check
 

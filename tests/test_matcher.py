@@ -36,6 +36,12 @@ class TestParseQuantityAndUnit:
         assert unit is None
         assert name == "Spinach"
 
+    def test_ignores_hyphenated_letter_prefix(self) -> None:
+        qty, unit, name = parse_quantity_and_unit("L-Carnitine")
+        assert qty is None
+        assert unit is None
+        assert name == "L-Carnitine"
+
 
 class TestNormalizeItemName:
     def test_normalizes_case_and_punctuation(self) -> None:
@@ -63,3 +69,13 @@ class TestFuzzyMatching:
         best, score = find_best_match("power drill", candidates, threshold=0.5)
         assert best is None
         assert score < 0.5
+
+    def test_empty_or_punctuation_only_scores_zero(self) -> None:
+        assert calculate_match_score("---", "!!!") == 0.0
+        assert calculate_match_score("", "") == 0.0
+
+    def test_descriptive_item_matches_concise_catalog_key(self) -> None:
+        candidates = ["milk", "free range eggs", "sourdough bread"]
+        best, score = find_best_match("fresh organic grass fed whole milk", candidates)
+        assert best == "milk"
+        assert score >= 0.35

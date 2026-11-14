@@ -11,12 +11,13 @@ Most shoppers create a grocery list in AnyList and then wonder:
 
 **Grocery Helper** answers this question by:
 1. Importing your grocery lists from AnyList (or using built-in demo lists).
-2. Fetching real-time and regional prices across major grocers (**ALDI**, **Trader Joe's**, **Kroger**, and **Whole Foods**).
-3. Analyzing the trade-offs:
+2. Fetching real-time weekly sales and regional prices across major grocers (**ALDI**, **Market Basket**, **Trader Joe's**, **Kroger**, **Whole Foods**, plus nearby stores discovered by ZIP code via **Flipp**).
+3. Listing active weekly on-sale items from local store circulars and matching them against items on your list.
+4. Analyzing the trade-offs:
    - **Split Basket**: Cheapest overall price by buying each item at its cheapest store.
    - **Single Store**: The best single store if you only want to make one stop.
    - **Constrained Stops**: Limit your route to at most $N$ stores (e.g. at most 2 stops).
-4. Exporting store-specific sub-lists back into AnyList with one click!
+5. Exporting store-specific sub-lists back into AnyList with one click!
 
 ---
 

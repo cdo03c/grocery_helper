@@ -10,11 +10,13 @@ Usage:
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from typing import Annotated, Any
 
 from dotenv import load_dotenv
-from pydantic import Field
-from pydantic_settings import BaseSettings  # pip: pydantic-settings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode  # pip: pydantic-settings
 
 # Load .env file at import time (no-op if file doesn't exist)
 load_dotenv()
@@ -34,7 +36,9 @@ class Settings(BaseSettings):
     # ── Pricing ───────────────────────────────────────────────────────────────
     default_store_zip: str = Field(default="", description="ZIP code for store lookups")
     price_cache_ttl_seconds: int = Field(
-        default=3600, description="How long to cache price results (seconds)"
+        default=3600,
+        ge=0,
+        description="How long to cache price results (seconds)",
     )
 
     # ── Kroger Developer API ─────────────────────────────────────────────────
@@ -45,9 +49,92 @@ class Settings(BaseSettings):
         description="Base URL for the Kroger Developer API",
     )
 
-    # ── Streamlit ─────────────────────────────────────────────────────────────
+    # ── Weekly Flyer Sources (Market Basket & Whole Foods) ───────────────────
+    market_basket_flyer_url: str = Field(
+        default="https://www.shopmarketbasket.com/wp-json/mb/v1/weekly-flyer",
+        description="JSON endpoint for Market Basket weekly flyer items",
+    )
+    whole_foods_base_url: str = Field(
+        default="https://www.wholefoodsmarket.com",
+        description="Base URL for Whole Foods Market website",
+    )
+    whole_foods_store_id: str = Field(
+        default="10010",
+        description="Whole Foods store ID for local weekly sales flyer (e.g. 10010 Cambridge)",
+    )
+    whole_foods_prime: bool = Field(
+        default=True,
+        description="Apply Prime member pricing for Whole Foods weekly deals",
+    )
+    enable_live_flyers: bool = Field(
+        default=False,
+        description="Fetch live weekly flyer sale items from Market Basket, Whole Foods, and Flipp",
+    )
+    flipp_base_url: str = Field(
+        default="https://backflipp.wishabi.com/flipp",
+        description="Base URL for Flipp weekly flyer & item search API",
+    )
+    enable_flipp: bool = Field(
+        default=True,
+        description=(
+            "Include generic nearby grocery store flyers via Flipp when live flyers are enabled"
+        ),
+    )
+
+    # ── Open Prices (Crowdsourced Retail Shelf Prices) ────────────────────────
+    open_prices_base_url: str = Field(
+        default="https://prices.openfoodfacts.org/api/v1",
+        description="Base URL for the Open Food Facts Open Prices REST API",
+    )
+    enable_open_prices: bool = Field(
+        default=False,
+        description=(
+            "Overlay crowdsourced retail receipt/shelf prices from Open Prices "
+            "(prices.openfoodfacts.org)"
+        ),
+    )
+
+    # ── Streamlit & Defaults ─────────────────────────────────────────────────
     app_title: str = Field(default="Grocery Helper", description="Streamlit page title")
+    default_allowed_stores: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Optional default store names to enable (comma-separated or JSON array in .env)"
+        ),
+    )
+    default_max_stores: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional default max number of stores to visit",
+    )
+    advertised_only: bool = Field(
+        default=False,
+        description="Use only advertised weekly flyer prices for Market Basket and Whole Foods",
+    )
+    ui_settings_file: str = Field(
+        default="~/.config/grocery_helper/ui_settings.json",
+        description="Path where Streamlit UI preferences are saved between runs (empty disables)",
+    )
     debug: bool = Field(default=False, description="Enable verbose debug logging")
+
+    @field_validator("default_allowed_stores", mode="before")
+    @classmethod
+    def _parse_default_allowed_stores(cls, value: Any) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, list):
+            return [str(v).strip() for v in value if str(v).strip()]
+        if isinstance(value, str):
+            raw = value.strip()
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(v).strip() for v in parsed if str(v).strip()]
+                except ValueError:
+                    pass
+            return [part.strip() for part in raw.split(",") if part.strip()]
+        return []
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

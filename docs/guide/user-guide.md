@@ -10,9 +10,9 @@ Grocery prices vary wildly between stores. Milk might be \$1.80 cheaper at ALDI,
 
 **Grocery Helper**:
 1. Connects to your **AnyList** grocery list (on your phone or computer).
-2. Checks prices across nearby stores (**ALDI**, **Trader Joe's**, **Kroger**, and **Whole Foods**).
-3. Tells you the **cheapest single store** to visit if you're in a hurry.
-4. Tells you how much more you could save by splitting your trip between **2 or more stores**.
+2. Checks prices and live weekly sales flyers across nearby stores (**ALDI**, **Market Basket**, **Trader Joe's**, **Kroger**, **Whole Foods**, plus other local grocers in your ZIP code via **Flipp**).
+3. Shows which items on your list are **currently on sale** and lets you browse weekly circulars in one place.
+4. Tells you the **cheapest single store** to visit if you're in a hurry, or how much more you save by splitting your trip across **2 or more stores**.
 5. Automatically creates **store-specific shopping lists back on your phone** so you can easily check items off while shopping!
 
 ```mermaid
@@ -62,7 +62,13 @@ Not everyone has every grocery store nearby. In the sidebar under **"Allowed Sto
 - Check the stores you are willing to shop at (e.g., **ALDI**, **Trader Joe's**, **Kroger**).
 - Uncheck any stores that aren't near you or that you don't prefer.
 
-You can also enter your **ZIP Code** to automatically find the closest branch locations.
+You can also enter your **ZIP Code** to discover nearby store flyers (such as **Star Market**, **Shaw's**, **Stop & Shop**, **Hannaford**, and **Wegmans**) and toggle **Enable Live Weekly Flyers** to overlay current weekly sales from **Market Basket**, **Whole Foods** (with optional **Prime Pricing**), and **Flipp** directly onto your comparisons.
+
+### Browse All Weekly On-Sale Items
+Switch to the **🏷️ Weekly Sales & Flyers** tab at any time to:
+- See which items on your current grocery list are on sale this week.
+- Search and filter full weekly circulars across Market Basket, Whole Foods, and nearby Flipp stores.
+- Check table rows or pick sale items from the dropdown to add weekly deals directly onto your active AnyList grocery list.
 
 ---
 
@@ -142,8 +148,9 @@ The matching engine automatically corrects minor spelling differences (e.g., *"a
 You can still use Grocery Helper completely free in **Demo Mode**! It will give you realistic price comparisons, route optimizations, and savings estimates using built-in grocery lists.
 
 ### How does Grocery Helper know grocery prices?
-- **Live Store APIs**: For supported chains like Kroger (and its family of stores like Ralphs, Dillons, King Soopers, Fred Meyer), Grocery Helper connects directly to live product catalogs and weekly sale circulars.
-- **Regional Price Models**: For chains like ALDI and Trader Joe's, Grocery Helper uses calibrated regional grocery price benchmarks that reflect everyday retail pricing.
+- **Live Weekly Sale Circulars**: Grocery Helper can fetch live weekly advertised deals directly from **Market Basket**, **Whole Foods Market** (including Amazon Prime sale prices), and nearby grocery chains for your ZIP code via **Flipp** (note that circulars publish advertised sale items rather than full everyday catalogs).
+- **Live Store APIs**: For Kroger family stores (Ralphs, Dillons, King Soopers, Fred Meyer) when configured, Grocery Helper connects to Kroger's product catalog API.
+- **Regional Price Models**: For baseline everyday pricing and chains without public APIs (like Trader Joe's), Grocery Helper uses calibrated regional grocery price benchmarks.
 
 ### What if a store doesn't carry an item on my list?
 If an item isn't available at a specific store, Grocery Helper flags it and automatically assigns that item to another store on your route that does carry it.

@@ -7,10 +7,29 @@ Pydantic data models for groceries, stores, and pricing.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class _ReloadSafeModel(BaseModel):
+    """Coerce instances created before a hot-module reload into the active model class."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_reloaded_instance(cls, value: Any) -> Any:
+        val_cls = type(value)
+        if (
+            not isinstance(value, cls)
+            and val_cls.__module__ == cls.__module__
+            and val_cls.__qualname__ == cls.__qualname__
+            and hasattr(value, "model_dump")
+        ):
+            return value.model_dump(mode="json")
+        return value
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -28,12 +47,39 @@ class Unit(StrEnum):
     PACK = "pack"
 
 
+_VOLUME_TO_LITERS: dict[Unit, Decimal] = {
+    Unit.LITER: Decimal("1"),
+    Unit.GALLON: Decimal("3.785411784"),
+}
+
+_WEIGHT_TO_OZ: dict[Unit, Decimal] = {
+    Unit.OZ: Decimal("1"),
+    Unit.LB: Decimal("16"),
+}
+
+
+def convert_unit_price(price: Decimal, from_unit: Unit, to_unit: Unit) -> Decimal | None:
+    """
+    Convert a unit price from *from_unit* to *to_unit* if both belong to the
+    same measurement dimension (volume or weight). Returns None otherwise.
+    """
+    if from_unit == to_unit:
+        return price
+
+    for factors in (_VOLUME_TO_LITERS, _WEIGHT_TO_OZ):
+        if from_unit in factors and to_unit in factors:
+            converted = (price / factors[from_unit]) * factors[to_unit]
+            return converted.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Core models
 # ---------------------------------------------------------------------------
 
 
-class GroceryItem(BaseModel):
+class GroceryItem(_ReloadSafeModel):
     """A single item on a grocery list."""
 
     id: str = Field(description="Unique identifier (e.g., from AnyList)")
@@ -42,10 +88,17 @@ class GroceryItem(BaseModel):
     unit: Unit = Field(default=Unit.EACH, description="Unit of measurement")
     category: str | None = Field(default=None, description="e.g., 'Produce', 'Dairy'")
     notes: str | None = Field(default=None, description="Free-text shopper notes")
+    price: Decimal | None = Field(
+        default=None, ge=Decimal("0"), description="Item unit or sale price in USD"
+    )
+    price_details: str | None = Field(
+        default=None, description="Optional price qualifier (e.g., '/lb', 'Save $1.00')"
+    )
+    store: str | None = Field(default=None, description="Assigned or preferred store name")
     checked: bool = Field(default=False, description="Marked off in shopping session")
 
 
-class GroceryList(BaseModel):
+class GroceryList(_ReloadSafeModel):
     """A named grocery list containing multiple items."""
 
     id: str = Field(description="Unique list identifier")
@@ -55,7 +108,7 @@ class GroceryList(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class StorePrice(BaseModel):
+class StorePrice(_ReloadSafeModel):
     """Price of a grocery item at a specific store."""
 
     item_name: str
@@ -64,6 +117,15 @@ class StorePrice(BaseModel):
     price: Decimal = Field(ge=Decimal("0"), description="Unit price in USD")
     unit: Unit = Field(default=Unit.EACH)
     sale_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    is_live: bool = Field(
+        default=False, description="Whether this price came from a live store or flyer feed"
+    )
+    matched_product_name: str | None = Field(
+        default=None, description="Matched store product or flyer item title"
+    )
+    deal_details: str | None = Field(
+        default=None, description="Promotional note (e.g. '2 for $5 · Save $1.50')"
+    )
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
@@ -72,32 +134,75 @@ class StorePrice(BaseModel):
         return self.sale_price if self.sale_price is not None else self.price
 
 
-class PriceComparison(BaseModel):
+class FlyerDeal(_ReloadSafeModel):
+    """An advertised weekly sale or promotional item from a store flyer."""
+
+    store_name: str
+    store_id: str | None = None
+    product_name: str
+    brand: str | None = None
+    department: str | None = None
+    regular_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    sale_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    prime_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    unit: Unit = Field(default=Unit.EACH)
+    deal_text: str | None = None
+    description: str | None = None
+    valid_from: str | None = None
+    valid_to: str | None = None
+    featured: bool = False
+    url: str | None = None
+
+    def effective_sale_price(self, use_prime: bool = True) -> Decimal | None:
+        """Return the best applicable advertised sale price."""
+        if use_prime and self.prime_price is not None:
+            return self.prime_price
+        return self.sale_price
+
+
+class PriceComparison(_ReloadSafeModel):
     """Aggregated price comparison for a single grocery item across stores."""
 
     item: GroceryItem
     prices: list[StorePrice] = Field(default_factory=list)
 
+    def normalized_price(self, store_price: StorePrice) -> Decimal:
+        """Return effective price normalized to the item's unit when convertible."""
+        converted = convert_unit_price(
+            store_price.effective_price,
+            store_price.unit,
+            self.item.unit,
+        )
+        return converted if converted is not None else store_price.effective_price
+
+    @property
+    def has_unit_mismatch(self) -> bool:
+        """Whether any store price uses a non-convertible unit different from the item's."""
+        return any(
+            convert_unit_price(sp.effective_price, sp.unit, self.item.unit) is None
+            for sp in self.prices
+        )
+
     @property
     def cheapest(self) -> StorePrice | None:
-        """Return the StorePrice entry with the lowest effective price."""
+        """Return the StorePrice entry with the lowest unit-normalized effective price."""
         if not self.prices:
             return None
-        return min(self.prices, key=lambda p: p.effective_price)
+        return min(self.prices, key=self.normalized_price)
 
     @property
     def savings(self) -> Decimal | None:
-        """Potential savings between most expensive and cheapest option."""
+        """Potential unit-normalized savings between most expensive and cheapest option."""
         if len(self.prices) < 2:
             return None
         cheapest = self.cheapest
-        most_expensive = max(self.prices, key=lambda p: p.effective_price)
         if cheapest is None:
             return None
-        return most_expensive.effective_price - cheapest.effective_price
+        most_expensive = max(self.prices, key=self.normalized_price)
+        return self.normalized_price(most_expensive) - self.normalized_price(cheapest)
 
 
-class OptimizedCart(BaseModel):
+class OptimizedCart(_ReloadSafeModel):
     """Result of running the pricing optimiser over a grocery list."""
 
     list_id: str
@@ -127,3 +232,26 @@ class OptimizedCart(BaseModel):
         if not self.single_store_totals:
             return None
         return min(self.single_store_totals.items(), key=lambda x: x[1])
+
+    @property
+    def savings_vs_best_single_store(self) -> Decimal | None:
+        """Overall savings compared to buying all items at the cheapest single store."""
+        best = self.best_single_store
+        if best is None:
+            return None
+        _, best_total = best
+        return max(Decimal("0.00"), best_total - self.total_cost).quantize(Decimal("0.01"))
+
+    @property
+    def savings_pct_vs_best_single_store(self) -> Decimal | None:
+        """Percentage saved relative to buying all items at the cheapest single store."""
+        best = self.best_single_store
+        diff = self.savings_vs_best_single_store
+        if best is None or diff is None:
+            return None
+        _, best_total = best
+        if best_total <= 0:
+            return Decimal("0.0")
+        return ((diff / best_total) * Decimal("100")).quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
