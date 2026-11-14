@@ -504,6 +504,9 @@ class TestHTTPOperations:
             assert b"set-list-item-name" in uploaded_bodies[1]
             assert b"remove-shopping-list-item" in uploaded_bodies[2]
             assert b"new-shopping-list" in uploaded_bodies[3]
+            for body in uploaded_bodies:
+                assert b'name="operations"' in body
+                assert b"filename=" not in body
 
     @pytest.mark.asyncio
     async def test_crud_unauthorized_raises_auth_error(self) -> None:

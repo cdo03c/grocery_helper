@@ -776,9 +776,11 @@ class AnyListClient:
 
     async def _post_operations(self, ops_bytes: bytes, *, action: str) -> httpx.Response:
         """Send a protobuf ``PBListOperationList`` payload to ``/data/shopping-lists/update``."""
+        # Omit filename in Content-Disposition so AnyList parses `operations` as a form field
+        # rather than treating it as an uploaded file (which AnyList ignores with 200 empty body).
         return await self._post(
             "/data/shopping-lists/update",
-            files={"operations": ("operations", ops_bytes, "application/octet-stream")},
+            files={"operations": (None, ops_bytes)},
             action=action,
         )
 
