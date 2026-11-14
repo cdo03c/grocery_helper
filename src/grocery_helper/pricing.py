@@ -429,6 +429,7 @@ class PricingService:
             or WholeFoodsFlyerProvider(
                 store_id=whole_foods_store_id,
                 use_prime=whole_foods_prime,
+                store_zip=store_zip,
             )
         )
         self._flipp_provider: FlippFlyerProvider = flipp_provider or FlippFlyerProvider(

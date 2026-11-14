@@ -373,9 +373,11 @@ class WholeFoodsFlyerProvider:
     Fetches live weekly sales flyer promotions from Whole Foods Market.
 
     Source: https://www.wholefoodsmarket.com/sales-flyer?store-id=<store_id>
+    Store discovery by ZIP: https://www.wholefoodsmarket.com/aplf/list
     """
 
     STORE_NAME = "Whole Foods"
+    ALM_BRAND_ID = "VUZHIFdob2xlIEZvb2Rz"
 
     def __init__(
         self,
@@ -383,11 +385,17 @@ class WholeFoodsFlyerProvider:
         use_prime: bool | None = None,
         base_url: str | None = None,
         http_client: httpx.AsyncClient | None = None,
+        store_zip: str | None = None,
     ) -> None:
-        self._store_id = store_id or settings.whole_foods_store_id or "10010"
+        self._store_id = (store_id or settings.whole_foods_store_id or "10010").strip()
         self._use_prime = settings.whole_foods_prime if use_prime is None else use_prime
         self._base_url = (base_url or settings.whole_foods_base_url).rstrip("/")
         self._http = http_client
+        self._store_zip = store_zip.strip() if store_zip else None
+        self._resolved_store_id: str | None = None
+        self._fallback_notice: str | None = None
+        self._last_error: str | None = None
+        self._fetch_locks: dict[int, asyncio.Lock] = {}
 
     @property
     def store_id(self) -> str:
@@ -399,40 +407,257 @@ class WholeFoodsFlyerProvider:
         """Whether Prime member flyer prices are preferred."""
         return self._use_prime
 
-    async def fetch_flyer(self, store_id: str | None = None) -> list[FlyerDeal]:
-        """Fetch and parse all active weekly sales promotions for a Whole Foods store."""
-        sid = store_id or self._store_id
-        c_key = cache_key("flyer", "whole_foods", sid, str(self._use_prime))
-        cached = get_cached_price(c_key)
-        if cached is not None and isinstance(cached, list):
-            return [d.model_copy() for d in cached]
+    @property
+    def store_zip(self) -> str | None:
+        """Optional ZIP code used for fallback store discovery."""
+        return self._store_zip
 
-        url = f"{self._base_url}/sales-flyer"
+    @property
+    def resolved_store_id(self) -> str | None:
+        """Actual 5-digit store ID used when an invalid ID triggered fallback."""
+        return self._resolved_store_id
+
+    @property
+    def fallback_notice(self) -> str | None:
+        """Human-readable note when a 404 store ID fell back to a nearby store."""
+        return self._fallback_notice
+
+    @property
+    def last_error(self) -> str | None:
+        """Last non-recovered error message encountered when fetching the flyer."""
+        return self._last_error
+
+    async def _get(self, url: str, params: dict[str, str]) -> httpx.Response:
+        """Perform an HTTP GET using the injected client or an ephemeral AsyncClient."""
+        if self._http is not None:
+            return await self._http.get(url, params=params, headers=_DEFAULT_HEADERS)
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True,
+            headers=_DEFAULT_HEADERS,
+        ) as client:
+            return await client.get(url, params=params)
+
+    @staticmethod
+    def _clean_zip(postal_code: str | None) -> str:
+        """Return a 5-digit US ZIP code prefix if present, else empty string."""
+        if not postal_code:
+            return ""
+        match = re.search(r"\b(\d{5})", postal_code.strip())
+        return match.group(1) if match else ""
+
+    @classmethod
+    def parse_stores_from_aplf_html(cls, html: str) -> list[dict[str, str]]:
+        """Extract Whole Foods store metadata from /aplf/list HTML."""
+        match = re.search(r'"locations"\s*:\s*\[', html)
+        if match is None:
+            return []
+
         try:
-            if self._http is not None:
-                res = await self._http.get(
-                    url,
-                    params={"store-id": sid},
-                    headers=_DEFAULT_HEADERS,
-                )
-            else:
-                async with httpx.AsyncClient(
-                    timeout=15.0,
-                    follow_redirects=True,
-                    headers=_DEFAULT_HEADERS,
-                ) as client:
-                    res = await client.get(url, params={"store-id": sid})
+            arr_start = match.end() - 1
+            raw_locations, _ = json.JSONDecoder().raw_decode(html, arr_start)
+        except (ValueError, IndexError):
+            return []
+
+        if not isinstance(raw_locations, list):
+            return []
+
+        stores: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for loc in raw_locations:
+            if not isinstance(loc, dict):
+                continue
+            store_code = str(loc.get("storeCode") or "").strip()
+            if not store_code or store_code in seen:
+                continue
+            seen.add(store_code)
+            raw_addr = loc.get("address")
+            addr: dict[str, Any] = raw_addr if isinstance(raw_addr, dict) else {}
+            raw_lines = addr.get("addressLines")
+            lines = raw_lines if isinstance(raw_lines, list) else []
+            postal = str(addr.get("postalCode") or "").strip()
+            stores.append(
+                {
+                    "store_id": store_code,
+                    "name": str(loc.get("locationName") or f"Store #{store_code}").strip(),
+                    "street": str(lines[0]).strip() if lines else "",
+                    "city": str(addr.get("city") or "").strip(),
+                    "state": str(addr.get("state") or "").strip(),
+                    "postal_code": postal,
+                    "zip5": cls._clean_zip(postal),
+                }
+            )
+        return stores
+
+    async def find_stores_by_zip(self, postal_code: str) -> list[dict[str, str]]:
+        """Look up nearby Whole Foods Market stores (with valid 5-digit IDs) for a ZIP."""
+        clean_zip = self._clean_zip(postal_code)
+        if not clean_zip:
+            return []
+
+        c_key = cache_key("wf_stores", clean_zip)
+        cached = get_cached_price(c_key)
+        if isinstance(cached, list):
+            return [dict(entry) for entry in cached]
+
+        try:
+            res = await self._get(
+                f"{self._base_url}/aplf/list",
+                params={"almBrandId": self.ALM_BRAND_ID, "postalCode": clean_zip},
+            )
         except Exception as exc:
-            logger.warning("Failed to fetch Whole Foods sales flyer (store %s): %s", sid, exc)
+            logger.warning("Failed to look up Whole Foods stores for ZIP %s: %s", clean_zip, exc)
             return []
 
         if res.status_code != 200:
-            logger.warning("Whole Foods sales flyer returned status %s", res.status_code)
+            logger.warning(
+                "Whole Foods store finder for ZIP %s returned status %s",
+                clean_zip,
+                res.status_code,
+            )
             return []
+
+        stores = self.parse_stores_from_aplf_html(res.text)
+        if stores:
+            set_cached_price(c_key, [dict(entry) for entry in stores])
+        return stores
+
+    async def _resolve_fallback_store(
+        self,
+        failed_store_id: str,
+        store_zip: str | None,
+    ) -> tuple[str, str] | None:
+        """Resolve the nearest valid 5-digit Whole Foods store ID for *store_zip*."""
+        clean_zip = self._clean_zip(store_zip)
+        if clean_zip:
+            discovered = await self.find_stores_by_zip(clean_zip)
+            for candidate in discovered:
+                cand_id = candidate.get("store_id", "")
+                if cand_id and cand_id != failed_store_id:
+                    city = candidate.get("city", "")
+                    state = candidate.get("state", "")
+                    loc_bits = ", ".join(p for p in (city, state) if p)
+                    label = f"{candidate['name']} ({loc_bits})" if loc_bits else candidate["name"]
+                    return cand_id, label
+
+            # Static fallback from built-in store directory (exact ZIP or 3-digit SCF)
+            for cand_id, (name, known_zip) in WHOLE_FOODS_STORES.items():
+                if cand_id != failed_store_id and known_zip == clean_zip:
+                    return cand_id, f"{name} ({known_zip})"
+            for cand_id, (name, known_zip) in WHOLE_FOODS_STORES.items():
+                if cand_id != failed_store_id and known_zip[:3] == clean_zip[:3]:
+                    return cand_id, f"{name} ({known_zip})"
+
+        return None
+
+    async def _fetch_raw_flyer(self, sid: str) -> tuple[int | None, list[FlyerDeal]]:
+        """Fetch and parse a specific store ID without fallback recursion."""
+        c_key = cache_key("flyer", "whole_foods", sid, str(self._use_prime))
+        cached = get_cached_price(c_key)
+        if cached is not None and isinstance(cached, list):
+            return 200, [d.model_copy() for d in cached]
+
+        url = f"{self._base_url}/sales-flyer"
+        try:
+            res = await self._get(url, params={"store-id": sid})
+        except Exception as exc:
+            logger.warning("Failed to fetch Whole Foods sales flyer (store %s): %s", sid, exc)
+            self._last_error = f"Failed to fetch Whole Foods sales flyer (store {sid}): {exc}"
+            return None, []
+
+        if res.status_code != 200:
+            return res.status_code, []
 
         deals = self.parse_flyer_html(res.text, store_id=sid)
         set_cached_price(c_key, [d.model_copy() for d in deals])
-        return deals
+        return 200, deals
+
+    @staticmethod
+    def _format_fallback_notice(
+        invalid_sid: str,
+        fallback_sid: str,
+        fallback_label: str,
+    ) -> str:
+        return (
+            f"Whole Foods store ID '{invalid_sid}' returned HTTP 404 "
+            "(Whole Foods store IDs are 5 digits, e.g., 10010); "
+            f"using nearest store {fallback_label} (#{fallback_sid}) instead."
+        )
+
+    async def fetch_flyer(self, store_id: str | None = None) -> list[FlyerDeal]:
+        """Fetch and parse all active weekly sales promotions for a Whole Foods store."""
+        loop_id = id(asyncio.get_running_loop())
+        lock = self._fetch_locks.setdefault(loop_id, asyncio.Lock())
+        async with lock:
+            return await self._fetch_flyer_unlocked(store_id=store_id)
+
+    async def _fetch_flyer_unlocked(self, store_id: str | None = None) -> list[FlyerDeal]:
+        sid = (store_id or self._store_id).strip()
+        effective_zip = self._store_zip
+        clean_zip = self._clean_zip(effective_zip)
+        self._last_error = None
+        self._fallback_notice = None
+        self._resolved_store_id = None
+
+        # Fast-path if this invalid ID was already mapped to a nearby store for this ZIP
+        alias_key = cache_key("flyer", "whole_foods_alias", sid, clean_zip or "none")
+        cached_alias = get_cached_price(alias_key)
+        if isinstance(cached_alias, tuple) and len(cached_alias) == 2:
+            fallback_sid, fallback_label = str(cached_alias[0]), str(cached_alias[1])
+            status, deals = await self._fetch_raw_flyer(fallback_sid)
+            if status == 200:
+                self._resolved_store_id = fallback_sid
+                self._fallback_notice = self._format_fallback_notice(
+                    sid, fallback_sid, fallback_label
+                )
+                return deals
+
+        status, deals = await self._fetch_raw_flyer(sid)
+        if status == 200:
+            self._resolved_store_id = sid
+            return deals
+        if status is None:
+            return []
+
+        if status == 404:
+            logger.warning(
+                "Whole Foods sales flyer returned status 404 for store-id=%s "
+                "(Whole Foods store IDs are 5 digits, e.g. 10010).",
+                sid,
+            )
+            fallback = await self._resolve_fallback_store(sid, effective_zip)
+            if fallback is not None:
+                fallback_sid, fallback_label = fallback
+                fb_status, fb_deals = await self._fetch_raw_flyer(fallback_sid)
+                if fb_status == 200:
+                    set_cached_price(alias_key, (fallback_sid, fallback_label))
+                    self._resolved_store_id = fallback_sid
+                    self._fallback_notice = self._format_fallback_notice(
+                        sid, fallback_sid, fallback_label
+                    )
+                    logger.info(
+                        "Whole Foods store-id=%s resolved via ZIP %s to store %s (%s)",
+                        sid,
+                        clean_zip or effective_zip,
+                        fallback_sid,
+                        fallback_label,
+                    )
+                    return fb_deals
+
+            self._last_error = (
+                f"Whole Foods store ID '{sid}' returned HTTP 404 Not Found. "
+                "Whole Foods /sales-flyer uses 5-digit store IDs (e.g., 10010 Cambridge); "
+                "find a valid ID on wholefoodsmarket.com/stores or set your ZIP code."
+            )
+            return []
+
+        logger.warning(
+            "Whole Foods sales flyer returned status %s for store-id=%s",
+            status,
+            sid,
+        )
+        self._last_error = f"Whole Foods sales flyer returned HTTP {status} for store ID '{sid}'."
+        return []
 
     @classmethod
     def parse_flyer_html(cls, html: str, store_id: str = "") -> list[FlyerDeal]:
@@ -526,6 +751,8 @@ class WholeFoodsFlyerProvider:
 
     async def get_prices(self, item: GroceryItem, store_zip: str) -> list[StorePrice]:
         """Return a live StorePrice if *item* matches an active Whole Foods weekly promo."""
+        if store_zip and not self._store_zip:
+            self._store_zip = store_zip.strip()
         deals = await self.fetch_flyer()
         matches = match_flyer_deals(item.name, deals, min_score=0.50, limit=5)
         if not matches:

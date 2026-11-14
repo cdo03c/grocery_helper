@@ -275,3 +275,53 @@ class TestFlyerHelpers:
         assert "wf_prime_toggle" in toggle_keys
         input_keys = {ti.key for ti in at.text_input}
         assert "wf_store_id_input" in input_keys
+
+    def test_deal_to_grocery_item_and_add_from_flyers_tab(self, at: AppTest) -> None:
+        from decimal import Decimal
+
+        from grocery_helper.app import deal_to_grocery_item
+        from grocery_helper.models import FlyerDeal, Unit
+
+        deal = FlyerDeal(
+            store_name="Market Basket",
+            product_name="Wild Caught Salmon Fillet",
+            sale_price=Decimal("7.99"),
+            unit=Unit.LB,
+            department="Seafood",
+            deal_text="$7.99/lb",
+        )
+        converted = deal_to_grocery_item(deal, quantity=2.0)
+        assert converted.name == "Wild Caught Salmon Fillet"
+        assert converted.quantity == 2.0
+        assert converted.unit == Unit.LB
+        assert converted.category == "Seafood"
+        assert converted.notes is not None
+        assert "Market Basket" in converted.notes
+
+        at.session_state["loaded_flyers_payload"] = {
+            "cache_sig": ("10010", "", True),
+            "deals": [deal.model_dump(mode="json")],
+            "mb_count": 1,
+            "wf_count": 0,
+            "flipp_count": 0,
+            "warnings": [],
+        }
+        at.run()
+        at.selectbox[0].select_index(1).run()
+        assert not at.exception
+
+        at.multiselect(key="flyer_add_picker").set_value([0])
+        at.number_input(key="flyer_picker_qty").set_value(2.0)
+        add_buttons = [b for b in at.button if "Add Selected Sale Item" in b.label]
+        assert len(add_buttons) == 1
+        add_buttons[0].click().run()
+
+        assert not at.exception
+        assert any("Wild Caught Salmon Fillet" in s.value for s in at.success)
+        comp_dfs = [
+            d.value
+            for d in at.dataframe
+            if "Item" in d.value.columns and "Cheapest Store" in d.value.columns
+        ]
+        assert comp_dfs
+        assert "Wild Caught Salmon Fillet" in comp_dfs[-1]["Item"].tolist()

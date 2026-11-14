@@ -344,10 +344,12 @@ async def _async_flyers(args: argparse.Namespace) -> int:
     if args.store in {"all", "mb"}:
         mb_provider = MarketBasketFlyerProvider()
         fetch_tasks.append(("Market Basket", asyncio.create_task(mb_provider.fetch_flyer())))
+    wf_provider: WholeFoodsFlyerProvider | None = None
     if args.store in {"all", "wf"}:
         wf_provider = WholeFoodsFlyerProvider(
             store_id=args.wf_store_id,
             use_prime=use_prime,
+            store_zip=getattr(args, "store_zip", "02139") or "02139",
         )
         fetch_tasks.append(("Whole Foods", asyncio.create_task(wf_provider.fetch_flyer())))
     if args.store in {"all", "flipp"}:
@@ -364,6 +366,11 @@ async def _async_flyers(args: argparse.Namespace) -> int:
                 fetched = [
                     d for d in fetched if d.store_name != MarketBasketFlyerProvider.STORE_NAME
                 ]
+            if store_label == "Whole Foods" and wf_provider is not None:
+                if isinstance(wf_provider.fallback_notice, str):
+                    print(f"Notice: {wf_provider.fallback_notice}", file=sys.stderr)
+                elif isinstance(wf_provider.last_error, str):
+                    errors.append(wf_provider.last_error)
             deals.extend(fetched)
         except Exception as err:
             errors.append(f"{store_label}: {err}")

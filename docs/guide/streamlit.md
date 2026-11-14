@@ -54,5 +54,5 @@ A comprehensive data table detailing:
 Browse and search active weekly sale items directly in the app:
 - Click **"🔄 Load / Refresh Live Weekly Flyers"** (or enable **Live Weekly Flyers** in the sidebar) to fetch circulars from **Market Basket**, **Whole Foods**, and nearby **Flipp** stores.
 - **🎯 On-Sale Matches for Your Current List**: Automatically highlights items from your active grocery list that are currently on sale, showing matched flyer titles, sale prices, regular prices, and deal terms.
-- **📋 Browse All Weekly On-Sale Items**: Filter active weekly deals by store, search by keyword, or toggle **Featured Only**.
+- **📋 Browse All Weekly On-Sale Items**: Filter active weekly deals by store, search by keyword, toggle **Featured Only**, check rows directly in the table or select deals in the **Or pick weekly sale item(s) to add** picker, and add them straight onto your active AnyList shopping list.
 

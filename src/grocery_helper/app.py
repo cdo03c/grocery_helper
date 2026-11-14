@@ -156,9 +156,9 @@ def render_sidebar() -> dict[str, Any]:
             "Whole Foods Store ID",
             value=settings.whole_foods_store_id,
             help=(
-                "Store ID from wholefoodsmarket.com/sales-flyer?store-id=... "
+                "5-digit Store ID from wholefoodsmarket.com/sales-flyer?store-id=... "
                 "(e.g., 10010 Cambridge, 10380 Medford, 10156 Framingham, "
-                "10090 Bedford, 10371 Andover)."
+                "10090 Bedford, 10371 Andover). Leave invalid/unknown to auto-resolve by ZIP."
             ),
             key="wf_store_id_input",
         )
@@ -166,6 +166,12 @@ def render_sidebar() -> dict[str, Any]:
         if wf_store_id in WHOLE_FOODS_STORES:
             wf_name, wf_zip = WHOLE_FOODS_STORES[wf_store_id]
             st.caption(f"Whole Foods location: {wf_name} ({wf_zip})")
+        elif not (wf_store_id.isdigit() and len(wf_store_id) == 5):
+            st.warning(
+                f"Whole Foods Store ID '{wf_store_id}' does not look like a 5-digit store code "
+                "(e.g., 10010). If it returns 404, Grocery Helper will fall back to the nearest "
+                f"store for ZIP {store_zip}."
+            )
         wf_prime = st.toggle(
             "Whole Foods Prime Pricing",
             value=settings.whole_foods_prime,
@@ -363,7 +369,7 @@ async def _fetch_all_flyers(
 ) -> tuple[list[FlyerDeal], list[FlyerDeal], list[FlyerDeal], list[str]]:
     """Fetch weekly flyers from Market Basket, Whole Foods, and optionally Flipp concurrently."""
     mb_provider = MarketBasketFlyerProvider()
-    wf_provider = WholeFoodsFlyerProvider(store_id=wf_store_id)
+    wf_provider = WholeFoodsFlyerProvider(store_id=wf_store_id, store_zip=store_zip)
     tasks: list[Any] = [mb_provider.fetch_flyer(), wf_provider.fetch_flyer()]
     if include_flipp:
         flipp_provider = FlippFlyerProvider(postal_code=store_zip or "02139")
@@ -385,6 +391,10 @@ async def _fetch_all_flyers(
         warnings.append(f"Whole Foods flyer fetch failed: {results[1]}")
     else:
         wf_deals = results[1]
+        if wf_provider.fallback_notice:
+            warnings.append(wf_provider.fallback_notice)
+        elif wf_provider.last_error:
+            warnings.append(wf_provider.last_error)
 
     if include_flipp and len(results) > 2:
         if isinstance(results[2], BaseException):
@@ -550,7 +560,7 @@ def render_price_comparison(cart: OptimizedCart) -> None:
         return
 
     df = pd.DataFrame(build_comparison_rows(cart))
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
 
 def render_optimised_cart(
@@ -667,7 +677,7 @@ def render_optimised_cart(
         chart_df = pd.DataFrame(
             {"Store": list(chart_data.keys()), "Cost ($)": list(chart_data.values())}
         )
-        st.bar_chart(chart_df.set_index("Store"), y="Cost ($)", use_container_width=True)
+        st.bar_chart(chart_df.set_index("Store"), y="Cost ($)", width="stretch")
 
     stop_rows = build_stop_count_summary(cart)
     if len(stop_rows) >= 2:
@@ -688,7 +698,7 @@ def render_optimised_cart(
                     ),
                 }
             )
-        st.dataframe(pd.DataFrame(formatted_stops), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(formatted_stops), width="stretch", hide_index=True)
 
     # Store assignments breakdown
     st.markdown("#### 🛍️ Shopping Route by Store")
@@ -730,6 +740,79 @@ def render_optimised_cart(
                 st.success(f"Created {len(created)} store-specific list(s) in AnyList:")
                 for cl in created:
                     st.write(f"- 📋 **{cl.name}** ({len(cl.items)} items)")
+
+
+def deal_to_grocery_item(
+    deal: FlyerDeal,
+    quantity: float = 1.0,
+    use_prime: bool = True,
+) -> GroceryItem:
+    """Convert a FlyerDeal into a GroceryItem ready to append to an AnyList list."""
+    eff = deal.effective_sale_price(use_prime=use_prime)
+    price_text = _format_deal_price(eff, deal.unit)
+    note_parts = [f"{deal.store_name} weekly sale"]
+    if price_text != "-":
+        note_parts.append(price_text)
+    if deal.deal_text and deal.deal_text != price_text:
+        note_parts.append(deal.deal_text)
+    return GroceryItem(
+        id=uuid.uuid4().hex,
+        name=deal.product_name.strip(),
+        quantity=max(0.5, float(quantity)),
+        unit=deal.unit,
+        category=deal.department,
+        notes=" · ".join(note_parts),
+    )
+
+
+def _format_flyer_option(deal: FlyerDeal, use_prime: bool = True) -> str:
+    """Format a concise picker label for a FlyerDeal."""
+    eff = deal.effective_sale_price(use_prime=use_prime)
+    price_disp = _format_deal_price(eff, deal.unit)
+    if price_disp == "-":
+        price_disp = deal.deal_text or "On sale"
+    return f"[{deal.store_name}] {deal.product_name} — {price_disp}"
+
+
+def _add_items_to_selected_list(
+    grocery_list: GroceryList,
+    items: list[GroceryItem],
+    config: dict[str, Any],
+) -> None:
+    """Persist one or more new items to the active AnyList list and refresh the UI."""
+    if not items:
+        return
+    client = _get_anylist_client(config)
+
+    async def _add_all() -> None:
+        async with client:
+            await client.authenticate()
+            for item in items:
+                await client.add_item(grocery_list.id, item)
+
+    try:
+        run_async(_add_all())
+    except (AnyListAuthError, AnyListAPIError) as err:
+        st.error(f"Failed to add item: {err}")
+        return
+
+    if not config["demo_mode"]:
+        grocery_list.items.extend(items)
+        _invalidate_live_lists_cache()
+
+    if len(items) == 1:
+        item = items[0]
+        st.session_state["flash_success"] = (
+            f"Added **{item.name}** ({item.quantity:g} {item.unit.value}) "
+            f"to **{grocery_list.name}**!"
+        )
+    else:
+        preview = ", ".join(it.name for it in items[:3])
+        extra = f" (+{len(items) - 3} more)" if len(items) > 3 else ""
+        st.session_state["flash_success"] = (
+            f"Added **{len(items)} items** ({preview}{extra}) to **{grocery_list.name}**!"
+        )
+    st.rerun()
 
 
 def render_flyers_tab(grocery_list: GroceryList, config: dict[str, Any]) -> None:
@@ -802,7 +885,7 @@ def render_flyers_tab(grocery_list: GroceryList, config: dict[str, Any]) -> None
 
     st.markdown("#### 🎯 On-Sale Matches for Your Current List")
     if matched_rows:
-        st.dataframe(pd.DataFrame(matched_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(matched_rows), width="stretch", hide_index=True)
     else:
         st.info("No items from your current list matched the active weekly flyers.")
 
@@ -842,13 +925,83 @@ def render_flyers_tab(grocery_list: GroceryList, config: dict[str, Any]) -> None
             or search_text in (d.department or "").lower()
         )
     ]
-    st.caption(f"Showing {len(filtered_deals)} of {len(deals)} weekly sale items")
+    st.caption(
+        f"Showing {len(filtered_deals)} of {len(deals)} weekly sale items — "
+        "select rows in the table or use the picker below to add items to your list."
+    )
     if filtered_deals:
-        st.dataframe(
+        table_event = st.dataframe(
             pd.DataFrame(build_flyer_rows(filtered_deals, use_prime=use_prime)),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
+            on_select="rerun",
+            selection_mode="multi-row",
+            key="flyer_browse_df",
         )
+        selected_rows = (
+            list(table_event.get("selection", {}).get("rows", []))
+            if isinstance(table_event, dict)
+            else []
+        )
+        checked_deals = [
+            filtered_deals[idx] for idx in selected_rows if 0 <= idx < len(filtered_deals)
+        ]
+
+        if checked_deals:
+            col_chk_btn, col_chk_qty = st.columns([3, 1])
+            with col_chk_qty:
+                checked_qty = st.number_input(
+                    "Qty per checked item",
+                    min_value=0.5,
+                    step=0.5,
+                    value=1.0,
+                    key="flyer_checked_qty",
+                )
+            with col_chk_btn:
+                st.write("")
+                if st.button(
+                    f"➕ Add {len(checked_deals)} Checked Table Item(s) to '{grocery_list.name}'",
+                    key="add_checked_flyer_items_btn",
+                    type="primary",
+                ):
+                    new_items = [
+                        deal_to_grocery_item(d, quantity=float(checked_qty), use_prime=use_prime)
+                        for d in checked_deals
+                    ]
+                    _add_items_to_selected_list(grocery_list, new_items, config)
+
+        with st.form("add_flyer_items_form", clear_on_submit=True):
+            col_pick, col_pick_qty = st.columns([4, 1])
+            with col_pick:
+                picked_indices = st.multiselect(
+                    f"Or pick weekly sale item(s) to add to '{grocery_list.name}'",
+                    options=list(range(len(filtered_deals))),
+                    format_func=lambda idx: _format_flyer_option(
+                        filtered_deals[idx], use_prime=use_prime
+                    ),
+                    placeholder="Type or select on-sale item(s)...",
+                    key="flyer_add_picker",
+                )
+            with col_pick_qty:
+                picked_qty = st.number_input(
+                    "Quantity",
+                    min_value=0.5,
+                    step=0.5,
+                    value=1.0,
+                    key="flyer_picker_qty",
+                )
+            add_picked = st.form_submit_button("➕ Add Selected Sale Item(s) to List")
+            if add_picked and picked_indices:
+                picked_items = [
+                    deal_to_grocery_item(
+                        filtered_deals[idx],
+                        quantity=float(picked_qty),
+                        use_prime=use_prime,
+                    )
+                    for idx in picked_indices
+                    if 0 <= idx < len(filtered_deals)
+                ]
+                _add_items_to_selected_list(grocery_list, picked_items, config)
     else:
         st.info("No weekly sale items match your current filter.")
 
@@ -895,30 +1048,12 @@ def main() -> None:
                 submitted = st.form_submit_button("Add to List")
                 if submitted and new_name.strip():
                     new_item = GroceryItem(
-                        id=f"item_{uuid.uuid4().hex[:8]}",
+                        id=uuid.uuid4().hex,
                         name=new_name.strip(),
                         quantity=float(new_qty),
                         unit=Unit(new_unit),
                     )
-                    client = _get_anylist_client(config)
-
-                    async def _add() -> None:
-                        async with client:
-                            await client.authenticate()
-                            await client.add_item(selected_list.id, new_item)
-
-                    try:
-                        run_async(_add())
-                    except (AnyListAuthError, AnyListAPIError) as err:
-                        st.error(f"Failed to add item: {err}")
-                    else:
-                        if not config["demo_mode"]:
-                            selected_list.items.append(new_item)
-                            _invalidate_live_lists_cache()
-                        st.session_state["flash_success"] = (
-                            f"Added **{new_name.strip()}** ({new_qty:g} {new_unit})!"
-                        )
-                        st.rerun()
+                    _add_items_to_selected_list(selected_list, [new_item], config)
 
         if not config.get("allowed_stores"):
             st.warning("Select at least one store in the sidebar to view price comparisons.")

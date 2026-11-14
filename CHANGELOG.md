@@ -23,13 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Open Prices Crowdsourced Retail Pricing (`grocery_helper.open_prices`)**:
   - Added `OpenPricesProvider` querying Open Food Facts' Open Prices REST API (`prices.openfoodfacts.org/api/v1`) with product-code search, category-tag staple fallback, ZIP proximity ranking, per-kilogram unit conversion, and cache isolation.
   - Wired `enable_open_prices` (`Mock → Open Prices → Flipp → Kroger → Market Basket & Whole Foods direct flyers` precedence) into `PricingService`, `.env` config (`ENABLE_OPEN_PRICES`, `OPEN_PRICES_BASE_URL`), Streamlit sidebar (`Include Open Prices (Crowdsourced)`), and CLI (`--open-prices` / `--no-open-prices`).
+- **Single-Store Savings Comparison (`grocery_helper.models`, `grocery_helper.pricing`, `grocery_helper.app`, `grocery_helper.cli`)**:
+  - Added `OptimizedCart.savings_vs_best_single_store` and `savings_pct_vs_best_single_store`, plus `build_stop_count_summary()` to compare total cost and savings for 1..N store stops against the generally cheapest single store in both Streamlit and the CLI.
+- **Add Weekly On-Sale Items to List (`grocery_helper.app`)**:
+  - Added `deal_to_grocery_item()` and interactive row-selection + multiselect controls in the **🏷️ Weekly Sales & Flyers** tab so users can add any weekly on-sale item directly to their active AnyList grocery list with quantity, unit, department, and sale notes.
 
 ### Fixed
 - **Live AnyList Authentication & Protobuf Sync (`grocery_helper.anylist_client`)**:
   - Replaced the legacy `/data/users/login` placeholder (which returned HTTP `403` and was misreported as an invalid password) with AnyList's real multipart `POST /auth/token` login and `/auth/token/refresh` token-renewal flow.
   - Added pure-Python Protocol Buffer serialization/deserialization for `POST /data/user-data/get` (`PBUserDataResponse`) and multipart `operations` uploads to `POST /data/shopping-lists/update` (`PBListOperationList`).
-- **Streamlit Session Reload Safety (`grocery_helper.models`, `grocery_helper.app`, `grocery_helper.pricing`)**:
+- **Streamlit Session Reload & Deprecation Safety (`grocery_helper.models`, `grocery_helper.app`, `grocery_helper.pricing`)**:
   - Added `_ReloadSafeModel` coercion across core Pydantic models and JSON serialization for Streamlit `session_state` caches so hot module reloads never trigger `ValidationError` when filtering stores or recalculating baskets.
+  - Updated Streamlit `st.dataframe` / `st.bar_chart` calls from deprecated `use_container_width=True` to `width="stretch"`.
 
 ---
 

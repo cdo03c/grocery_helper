@@ -262,6 +262,151 @@ async def test_whole_foods_get_prices_respects_prime_flag() -> None:
     assert reg_sale_prices[0].sale_price == Decimal("11.99")
 
 
+def test_whole_foods_parse_stores_from_aplf_html() -> None:
+    payload = {
+        "locations": [
+            {
+                "storeCode": "10010",
+                "locationName": "Cambridge",
+                "address": {
+                    "addressLines": ["115 Prospect St"],
+                    "city": "Cambridge",
+                    "state": "MA",
+                    "postalCode": "02139-2505",
+                },
+            },
+            {
+                "storeCode": "10010",
+                "locationName": "Cambridge Duplicate",
+                "address": {"postalCode": "02139"},
+            },
+            {
+                "storeCode": "10113",
+                "locationName": "River Street",
+                "address": {
+                    "addressLines": ["340 River Street"],
+                    "city": "Cambridge",
+                    "state": "MA",
+                    "postalCode": "02139-4618",
+                },
+            },
+        ]
+    }
+    html = f"<html><script>var cfg = {json.dumps(payload)};</script></html>"
+    stores = WholeFoodsFlyerProvider.parse_stores_from_aplf_html(html)
+    assert len(stores) == 2
+    assert stores[0]["store_id"] == "10010"
+    assert stores[0]["name"] == "Cambridge"
+    assert stores[0]["zip5"] == "02139"
+    assert stores[1]["store_id"] == "10113"
+
+
+@pytest.mark.asyncio
+async def test_whole_foods_404_resolves_nearest_store_by_zip() -> None:
+    from grocery_helper.utils import clear_price_cache
+
+    clear_price_cache()
+    aplf_payload = {
+        "locations": [
+            {
+                "storeCode": "10113",
+                "locationName": "River Street",
+                "address": {
+                    "city": "Cambridge",
+                    "state": "MA",
+                    "postalCode": "02139-4618",
+                },
+            }
+        ]
+    }
+    aplf_html = f"<script>window.__INIT__ = {json.dumps(aplf_payload)};</script>"
+    flyer_data = {
+        "props": {
+            "pageProps": {
+                "storeId": "10113",
+                "storeName": "River Street",
+                "promotions": [
+                    {
+                        "productName": "Organic Bananas",
+                        "regularPrice": "$0.99/lb",
+                        "salePrice": "$0.79/lb",
+                        "primePrice": "$0.69/lb",
+                    }
+                ],
+            }
+        }
+    }
+    flyer_html = (
+        f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(flyer_data)}</script>'
+    )
+
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(f"{request.url.path}?{request.url.query.decode()}")
+        if request.url.path == "/sales-flyer":
+            sid = request.url.params.get("store-id")
+            if sid == "1001767":
+                return httpx.Response(404, text="Not Found")
+            if sid == "10113":
+                return httpx.Response(200, text=flyer_html)
+        if request.url.path == "/aplf/list":
+            return httpx.Response(200, text=aplf_html)
+        return httpx.Response(404, text="Not Found")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = WholeFoodsFlyerProvider(
+            store_id="1001767",
+            store_zip="02139",
+            use_prime=True,
+            base_url="https://example.test",
+            http_client=client,
+        )
+        deals = await provider.fetch_flyer()
+        assert len(deals) == 1
+        assert deals[0].product_name == "Organic Bananas"
+        assert provider.resolved_store_id == "10113"
+        assert provider.last_error is None
+        assert provider.fallback_notice is not None
+        assert "1001767" in provider.fallback_notice
+        assert "10113" in provider.fallback_notice
+
+        # Second call (e.g., via get_prices) uses cached alias & deals without hitting 404 again
+        call_count_before = len(calls)
+        prices = await provider.get_prices(
+            GroceryItem(id="b1", name="Organic Bananas", unit=Unit.LB),
+            store_zip="02139",
+        )
+        assert len(prices) == 1
+        assert prices[0].sale_price == Decimal("0.69")
+        assert len(calls) == call_count_before
+
+
+@pytest.mark.asyncio
+async def test_whole_foods_404_sets_last_error_when_unresolved() -> None:
+    from grocery_helper.utils import clear_price_cache
+
+    clear_price_cache()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="Not Found")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = WholeFoodsFlyerProvider(
+            store_id="1001767",
+            store_zip="",
+            base_url="https://example.test",
+            http_client=client,
+        )
+        deals = await provider.fetch_flyer()
+
+    assert deals == []
+    assert provider.fallback_notice is None
+    assert provider.last_error is not None
+    assert "404" in provider.last_error
+    assert "5-digit" in provider.last_error
+
+
 def test_flipp_normalize_and_parsers() -> None:
     from grocery_helper.flyers import FlippFlyerProvider
 

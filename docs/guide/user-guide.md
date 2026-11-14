@@ -68,6 +68,7 @@ You can also enter your **ZIP Code** to discover nearby store flyers (such as **
 Switch to the **🏷️ Weekly Sales & Flyers** tab at any time to:
 - See which items on your current grocery list are on sale this week.
 - Search and filter full weekly circulars across Market Basket, Whole Foods, and nearby Flipp stores.
+- Check table rows or pick sale items from the dropdown to add weekly deals directly onto your active AnyList grocery list.
 
 ---
 
