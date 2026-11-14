@@ -23,6 +23,7 @@ from typing import Any
 
 import httpx
 
+from grocery_helper import __version__
 from grocery_helper.config import settings
 from grocery_helper.flyers import score_flyer_match
 from grocery_helper.matcher import normalize_item_name, parse_quantity_and_unit
@@ -32,7 +33,7 @@ from grocery_helper.utils import cache_key, get_cached_price, set_cached_price
 logger = logging.getLogger(__name__)
 
 _DEFAULT_HEADERS = {
-    "User-Agent": "grocery_helper/0.1.0 (https://github.com/cuyler/grocery_helper)",
+    "User-Agent": f"grocery_helper/{__version__} (https://github.com/cuyler/grocery_helper)",
     "Accept": "application/json",
 }
 
