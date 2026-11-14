@@ -610,3 +610,48 @@ async def test_pricing_service_flipp_multi_store_overlay_and_precedence() -> Non
     # Direct Market Basket price overrides Flipp's Market Basket entry
     assert by_store["Market Basket"].sale_price == Decimal("1.69")
     assert by_store["Market Basket"].store_id == "store_market_basket"
+
+
+def test_build_stop_count_summary_compares_stops_against_single_store() -> None:
+    """build_stop_count_summary computes cost & savings vs best single store per stop count."""
+    from grocery_helper.models import PriceComparison
+    from grocery_helper.pricing import build_stop_count_summary, solve_cart_for_comparisons
+
+    milk = GroceryItem(id="m1", name="Milk")
+    bread = GroceryItem(id="b1", name="Bread")
+    comps = [
+        PriceComparison(
+            item=milk,
+            prices=[
+                StorePrice(item_name="Milk", store_name="ALDI", price=Decimal("2.50")),
+                StorePrice(item_name="Milk", store_name="Market Basket", price=Decimal("4.00")),
+                StorePrice(item_name="Milk", store_name="Whole Foods", price=Decimal("5.00")),
+            ],
+        ),
+        PriceComparison(
+            item=bread,
+            prices=[
+                StorePrice(item_name="Bread", store_name="ALDI", price=Decimal("4.50")),
+                StorePrice(item_name="Bread", store_name="Market Basket", price=Decimal("2.00")),
+                StorePrice(item_name="Bread", store_name="Whole Foods", price=Decimal("5.00")),
+            ],
+        ),
+    ]
+    cart = solve_cart_for_comparisons("list_1", comps, max_stores=2)
+    assert cart.total_cost == Decimal("4.50")
+    assert cart.best_single_store == ("Market Basket", Decimal("6.00"))
+    assert cart.savings_vs_best_single_store == Decimal("1.50")
+    assert cart.savings_pct_vs_best_single_store == Decimal("25.0")
+
+    rows = build_stop_count_summary(cart)
+    assert len(rows) == 3
+    assert rows[0]["stops"] == 1
+    assert rows[0]["total_cost"] == Decimal("6.00")
+    assert rows[0]["savings_vs_single"] == Decimal("0.00")
+    assert rows[0]["is_selected"] is False
+
+    assert rows[1]["stops"] == 2
+    assert rows[1]["total_cost"] == Decimal("4.50")
+    assert rows[1]["savings_vs_single"] == Decimal("1.50")
+    assert rows[1]["savings_pct"] == Decimal("25.0")
+    assert rows[1]["is_selected"] is True

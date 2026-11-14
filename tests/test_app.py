@@ -100,9 +100,11 @@ class TestListSelectorAndResults:
         assert any("Price Comparison" in s for s in subheaders)
         assert any("Optimised Cart" in s for s in subheaders)
 
-        # Verify metrics (Total, Savings, Best Single Store)
+        # Verify metrics (Total, Single-Store Savings, Best Single Store, Max Savings)
         labels = [m.label for m in at.metric]
         assert "Optimised Basket Total" in labels
+        assert "Savings vs. Best Single Store" in labels
+        assert "Best Single Store" in labels
         assert "Estimated Total Savings" in labels
 
         # Verify comparison dataframe table rendered

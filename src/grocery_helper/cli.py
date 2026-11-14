@@ -298,8 +298,19 @@ async def _async_optimise(args: argparse.Namespace) -> int:
     print("-" * 74)
     print(
         f"Optimised Split Basket: {format_currency(cart.total_cost)} "
-        f"(Potential Savings: {format_currency(cart.estimated_savings)})"
+        f"(Max Savings vs. Highest Prices: {format_currency(cart.estimated_savings)})"
     )
+    if (
+        cart.best_single_store is not None
+        and cart.savings_vs_best_single_store is not None
+        and cart.savings_pct_vs_best_single_store is not None
+    ):
+        b_store, b_total = cart.best_single_store
+        print(
+            f"Savings vs. Best Single Store ({b_store} at {format_currency(b_total)}): "
+            f"{format_currency(cart.savings_vs_best_single_store)} "
+            f"({cart.savings_pct_vs_best_single_store:.1f}%)"
+        )
 
     if cart.single_store_totals:
         print("\nSingle-Store Basket Totals:")

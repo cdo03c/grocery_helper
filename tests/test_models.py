@@ -150,3 +150,29 @@ class TestReloadSafeModels:
         unrelated: Any = _UnrelatedModel(id="x", name="Milk")
         with pytest.raises(ValidationError):
             PriceComparison(item=unrelated)
+
+
+class TestOptimizedCartSingleStoreSavings:
+    def test_savings_vs_best_single_store_and_pct(self) -> None:
+        from grocery_helper.models import OptimizedCart
+
+        cart = OptimizedCart(
+            list_id="l1",
+            store_assignments={"i1": "ALDI", "i2": "Market Basket"},
+            total_cost=Decimal("16.00"),
+            estimated_savings=Decimal("6.00"),
+            single_store_totals={"ALDI": Decimal("20.00"), "Market Basket": Decimal("22.00")},
+            max_stores_constraint=2,
+        )
+        assert cart.savings_vs_best_single_store == Decimal("4.00")
+        assert cart.savings_pct_vs_best_single_store == Decimal("20.0")
+
+        empty_cart = OptimizedCart(
+            list_id="l2",
+            store_assignments={},
+            total_cost=Decimal("0.00"),
+            estimated_savings=Decimal("0.00"),
+            single_store_totals={},
+        )
+        assert empty_cart.savings_vs_best_single_store is None
+        assert empty_cart.savings_pct_vs_best_single_store is None

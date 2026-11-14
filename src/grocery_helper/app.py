@@ -31,7 +31,7 @@ from grocery_helper.flyers import (
     match_flyer_deals,
 )
 from grocery_helper.models import FlyerDeal, GroceryItem, GroceryList, OptimizedCart, Unit
-from grocery_helper.pricing import MockPricingProvider, PricingService
+from grocery_helper.pricing import MockPricingProvider, PricingService, build_stop_count_summary
 from grocery_helper.utils import configure_logging, format_currency, format_savings
 
 # ---------------------------------------------------------------------------
@@ -562,31 +562,57 @@ def render_optimised_cart(
     st.subheader("🏪 Optimised Cart & Savings")
 
     # Top metrics
-    col1, col2, col3 = st.columns(3)
+    best_single = cart.best_single_store
+    savings_vs_single = cart.savings_vs_best_single_store
+    pct_vs_single = cart.savings_pct_vs_best_single_store
+
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
+        stores_used_count = len(cart.stores_used)
+        stop_label = f"{stores_used_count} store(s)" if stores_used_count else "0 stores"
         st.metric(
             label="Optimised Basket Total",
             value=format_currency(cart.total_cost),
+            delta=stop_label,
+            delta_color="off",
             help="Total cost when buying each item at its assigned store.",
         )
     with col2:
-        st.metric(
-            label="Estimated Total Savings",
-            value=format_currency(cart.estimated_savings),
-            help="Savings compared to purchasing items at the highest-priced store.",
-        )
+        if best_single is not None and savings_vs_single is not None and pct_vs_single is not None:
+            best_store, best_total = best_single
+            vs_delta = (
+                f"{pct_vs_single:.1f}% saved vs {best_store}"
+                if savings_vs_single > 0
+                else f"Matches {best_store}"
+            )
+            st.metric(
+                label="Savings vs. Best Single Store",
+                value=format_currency(savings_vs_single),
+                delta=vs_delta,
+                delta_color="normal" if savings_vs_single > 0 else "off",
+                help=(
+                    "Overall savings from your selected stores compared to buying "
+                    "every item at the generally cheapest single store."
+                ),
+            )
+        else:
+            st.metric(
+                label="Savings vs. Best Single Store",
+                value="N/A",
+                help="Requires at least one store carrying all items for single-store comparison.",
+            )
     with col3:
-        if cart.best_single_store:
-            best_store, best_total = cart.best_single_store
+        if best_single is not None:
+            best_store, best_total = best_single
             diff = best_total - cart.total_cost
             if diff > 0:
-                delta_str: str | None = f"+{format_currency(diff)} vs split"
+                delta_str: str | None = f"{format_currency(best_total)} (+{format_currency(diff)})"
                 delta_color: Literal["normal", "inverse", "off"] = "inverse"
             elif diff == 0:
-                delta_str = "Matches route total"
+                delta_str = f"{format_currency(best_total)} (matches route)"
                 delta_color = "off"
             else:
-                delta_str = f"-{format_currency(abs(diff))} vs route"
+                delta_str = f"{format_currency(best_total)} (-{format_currency(abs(diff))})"
                 delta_color = "normal"
             st.metric(
                 label="Best Single Store",
@@ -594,6 +620,37 @@ def render_optimised_cart(
                 delta=delta_str,
                 delta_color=delta_color,
                 help="Cheapest option if you only make one stop.",
+            )
+        else:
+            st.metric(
+                label="Best Single Store",
+                value="N/A",
+                help="No single selected store covers every item on this list.",
+            )
+    with col4:
+        st.metric(
+            label="Estimated Total Savings",
+            value=format_currency(cart.estimated_savings),
+            help="Max savings compared to purchasing each item at the highest-priced store.",
+        )
+
+    if best_single is not None and savings_vs_single is not None and pct_vs_single is not None:
+        best_store, best_total = best_single
+        stops_desc = (
+            f"**{len(cart.stores_used)} store(s)** ({', '.join(cart.stores_used)})"
+            if cart.stores_used
+            else "your selected stores"
+        )
+        if savings_vs_single > 0:
+            st.success(
+                f"Visiting {stops_desc} saves **{format_currency(savings_vs_single)} "
+                f"({pct_vs_single:.1f}%)** overall compared to buying your whole list at "
+                f"**{best_store}** ({format_currency(best_total)})."
+            )
+        else:
+            st.info(
+                f"Buying everything at **{best_store}** ({format_currency(best_total)}) "
+                f"already matches your lowest split price ({format_currency(cart.total_cost)})."
             )
 
     st.divider()
@@ -611,6 +668,27 @@ def render_optimised_cart(
             {"Store": list(chart_data.keys()), "Cost ($)": list(chart_data.values())}
         )
         st.bar_chart(chart_df.set_index("Store"), y="Cost ($)", use_container_width=True)
+
+    stop_rows = build_stop_count_summary(cart)
+    if len(stop_rows) >= 2:
+        st.markdown("#### 🚗 Potential Savings by Number of Stores")
+        formatted_stops = []
+        for entry in stop_rows:
+            sav = entry["savings_vs_single"]
+            pct = entry["savings_pct"]
+            formatted_stops.append(
+                {
+                    "Stops": f"{entry['stops']}{' (Selected)' if entry['is_selected'] else ''}",
+                    "Stores": ", ".join(entry["stores"]) or "-",
+                    "Basket Total": format_currency(entry["total_cost"]),
+                    "Savings vs. Best Single Store": (
+                        f"{format_currency(sav)} ({pct:.1f}%)"
+                        if sav is not None and pct is not None
+                        else "-"
+                    ),
+                }
+            )
+        st.dataframe(pd.DataFrame(formatted_stops), use_container_width=True, hide_index=True)
 
     # Store assignments breakdown
     st.markdown("#### 🛍️ Shopping Route by Store")

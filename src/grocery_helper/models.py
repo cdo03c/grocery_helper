@@ -225,3 +225,26 @@ class OptimizedCart(_ReloadSafeModel):
         if not self.single_store_totals:
             return None
         return min(self.single_store_totals.items(), key=lambda x: x[1])
+
+    @property
+    def savings_vs_best_single_store(self) -> Decimal | None:
+        """Overall savings compared to buying all items at the cheapest single store."""
+        best = self.best_single_store
+        if best is None:
+            return None
+        _, best_total = best
+        return max(Decimal("0.00"), best_total - self.total_cost).quantize(Decimal("0.01"))
+
+    @property
+    def savings_pct_vs_best_single_store(self) -> Decimal | None:
+        """Percentage saved relative to buying all items at the cheapest single store."""
+        best = self.best_single_store
+        diff = self.savings_vs_best_single_store
+        if best is None or diff is None:
+            return None
+        _, best_total = best
+        if best_total <= 0:
+            return Decimal("0.0")
+        return ((diff / best_total) * Decimal("100")).quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )

@@ -686,97 +686,157 @@ class PricingService:
                 comparison = PriceComparison(item=comparison.item, prices=filtered_prices)
             comparisons.append(comparison)
 
-        # Track single-store totals (across all allowed stores that carry all items)
-        store_totals: dict[str, Decimal] = {}
-        store_item_counts: dict[str, int] = {}
-        total_items = len(grocery_list.items)
-
-        for comp in comparisons:
-            qty = Decimal(str(comp.item.quantity))
-            for sp in comp.prices:
-                store_totals.setdefault(sp.store_name, Decimal("0.00"))
-                store_item_counts.setdefault(sp.store_name, 0)
-                store_totals[sp.store_name] += comp.normalized_price(sp) * qty
-                store_item_counts[sp.store_name] += 1
-
-        single_store_totals = (
-            {
-                store: cost
-                for store, cost in store_totals.items()
-                if store_item_counts[store] == total_items
-            }
-            if total_items > 0
-            else {}
+        return solve_cart_for_comparisons(
+            grocery_list.id,
+            comparisons,
+            max_stores=max_stores,
         )
 
-        # Determine store candidates
-        candidate_stores = sorted({sp.store_name for comp in comparisons for sp in comp.prices})
 
-        # Apply max_stores constraint if requested and fewer than candidate count
-        selected_store_subset: set[str] | None = None
-        if max_stores is not None and len(candidate_stores) > max_stores:
-            best_covered_count = -1
-            best_subset_cost: Decimal | None = None
-            best_subset: tuple[str, ...] | None = None
+def solve_cart_for_comparisons(
+    list_id: str,
+    comparisons: list[PriceComparison],
+    max_stores: int | None = None,
+) -> OptimizedCart:
+    """Compute optimal store assignments and totals from pre-fetched comparisons."""
+    if max_stores is not None and max_stores < 1:
+        raise ValueError("max_stores must be at least 1")
 
-            for store_combo in itertools.combinations(candidate_stores, max_stores):
-                combo_set = set(store_combo)
-                combo_cost = Decimal("0.00")
-                covered_count = 0
+    store_totals: dict[str, Decimal] = {}
+    store_item_counts: dict[str, int] = {}
+    total_items = len(comparisons)
 
-                for comp in comparisons:
-                    avail = [p for p in comp.prices if p.store_name in combo_set]
-                    if not avail:
-                        continue
-                    covered_count += 1
-                    cheapest_in_combo = min(avail, key=comp.normalized_price)
-                    combo_cost += comp.normalized_price(cheapest_in_combo) * Decimal(
-                        str(comp.item.quantity)
-                    )
+    for comp in comparisons:
+        qty = Decimal(str(comp.item.quantity))
+        for sp in comp.prices:
+            store_totals.setdefault(sp.store_name, Decimal("0.00"))
+            store_item_counts.setdefault(sp.store_name, 0)
+            store_totals[sp.store_name] += comp.normalized_price(sp) * qty
+            store_item_counts[sp.store_name] += 1
 
-                is_better = covered_count > best_covered_count or (
-                    covered_count == best_covered_count
-                    and (best_subset_cost is None or combo_cost < best_subset_cost)
+    single_store_totals = (
+        {
+            store: cost
+            for store, cost in store_totals.items()
+            if store_item_counts[store] == total_items
+        }
+        if total_items > 0
+        else {}
+    )
+
+    candidate_stores = sorted({sp.store_name for comp in comparisons for sp in comp.prices})
+
+    selected_store_subset: set[str] | None = None
+    if max_stores is not None and len(candidate_stores) > max_stores:
+        best_covered_count = -1
+        best_subset_cost: Decimal | None = None
+        best_subset: tuple[str, ...] | None = None
+
+        for store_combo in itertools.combinations(candidate_stores, max_stores):
+            combo_set = set(store_combo)
+            combo_cost = Decimal("0.00")
+            covered_count = 0
+
+            for comp in comparisons:
+                avail = [p for p in comp.prices if p.store_name in combo_set]
+                if not avail:
+                    continue
+                covered_count += 1
+                cheapest_in_combo = min(avail, key=comp.normalized_price)
+                combo_cost += comp.normalized_price(cheapest_in_combo) * Decimal(
+                    str(comp.item.quantity)
                 )
-                if is_better:
-                    best_covered_count = covered_count
-                    best_subset_cost = combo_cost
-                    best_subset = store_combo
 
-            if best_subset is not None:
-                selected_store_subset = set(best_subset)
-
-        store_assignments: dict[str, str] = {}
-        total_cost = Decimal("0.00")
-        estimated_savings = Decimal("0.00")
-
-        for comp in comparisons:
-            qty = Decimal(str(comp.item.quantity))
-            eligible_prices = (
-                [p for p in comp.prices if p.store_name in selected_store_subset]
-                if selected_store_subset is not None
-                else comp.prices
+            is_better = covered_count > best_covered_count or (
+                covered_count == best_covered_count
+                and (best_subset_cost is None or combo_cost < best_subset_cost)
             )
+            if is_better:
+                best_covered_count = covered_count
+                best_subset_cost = combo_cost
+                best_subset = store_combo
 
-            if eligible_prices:
-                cheapest_sp = min(eligible_prices, key=comp.normalized_price)
-                cheapest_norm = comp.normalized_price(cheapest_sp)
-                store_assignments[comp.item.id] = cheapest_sp.store_name
-                total_cost += cheapest_norm * qty
-                if len(comp.prices) >= 2:
-                    most_expensive_sp = max(comp.prices, key=comp.normalized_price)
-                    item_savings = max(
-                        Decimal("0.00"),
-                        comp.normalized_price(most_expensive_sp) - cheapest_norm,
-                    )
-                    estimated_savings += item_savings * qty
+        if best_subset is not None:
+            selected_store_subset = set(best_subset)
 
-        return OptimizedCart(
-            list_id=grocery_list.id,
-            store_assignments=store_assignments,
-            total_cost=total_cost,
-            estimated_savings=estimated_savings,
-            comparisons=comparisons,
-            single_store_totals=single_store_totals,
-            max_stores_constraint=max_stores,
+    store_assignments: dict[str, str] = {}
+    total_cost = Decimal("0.00")
+    estimated_savings = Decimal("0.00")
+
+    for comp in comparisons:
+        qty = Decimal(str(comp.item.quantity))
+        eligible_prices = (
+            [p for p in comp.prices if p.store_name in selected_store_subset]
+            if selected_store_subset is not None
+            else comp.prices
         )
+
+        if eligible_prices:
+            cheapest_sp = min(eligible_prices, key=comp.normalized_price)
+            cheapest_norm = comp.normalized_price(cheapest_sp)
+            store_assignments[comp.item.id] = cheapest_sp.store_name
+            total_cost += cheapest_norm * qty
+            if len(comp.prices) >= 2:
+                most_expensive_sp = max(comp.prices, key=comp.normalized_price)
+                item_savings = max(
+                    Decimal("0.00"),
+                    comp.normalized_price(most_expensive_sp) - cheapest_norm,
+                )
+                estimated_savings += item_savings * qty
+
+    return OptimizedCart(
+        list_id=list_id,
+        store_assignments=store_assignments,
+        total_cost=total_cost,
+        estimated_savings=estimated_savings,
+        comparisons=comparisons,
+        single_store_totals=single_store_totals,
+        max_stores_constraint=max_stores,
+    )
+
+
+def build_stop_count_summary(cart: OptimizedCart) -> list[dict[str, Any]]:
+    """
+    Evaluate basket total and savings vs. best single store for 1..N store stops.
+
+    Uses the already-fetched comparisons inside *cart* without additional I/O.
+    """
+    candidate_stores = sorted({sp.store_name for comp in cart.comparisons for sp in comp.prices})
+    if not candidate_stores:
+        return []
+
+    best_single = cart.best_single_store
+    best_single_total = best_single[1] if best_single is not None else None
+    summary: list[dict[str, Any]] = []
+
+    for stops in range(1, len(candidate_stores) + 1):
+        sub_cart = solve_cart_for_comparisons(cart.list_id, cart.comparisons, max_stores=stops)
+        savings_vs_single: Decimal | None = None
+        savings_pct: Decimal | None = None
+        if best_single_total is not None:
+            savings_vs_single = max(
+                Decimal("0.00"), best_single_total - sub_cart.total_cost
+            ).quantize(Decimal("0.01"))
+            if best_single_total > 0:
+                savings_pct = ((savings_vs_single / best_single_total) * Decimal("100")).quantize(
+                    Decimal("0.1"), rounding=ROUND_HALF_UP
+                )
+            else:
+                savings_pct = Decimal("0.0")
+
+        summary.append(
+            {
+                "stops": stops,
+                "stores": sub_cart.stores_used,
+                "total_cost": sub_cart.total_cost,
+                "savings_vs_single": savings_vs_single,
+                "savings_pct": savings_pct,
+                "is_selected": (
+                    stops == cart.max_stores_constraint
+                    if cart.max_stores_constraint is not None
+                    else stops == len(candidate_stores)
+                ),
+            }
+        )
+
+    return summary
