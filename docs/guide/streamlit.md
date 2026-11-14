@@ -42,7 +42,7 @@ Above the results tabs, expand **"➕ Add an Item to this List"**:
   - **Best Single Store**: The cheapest single store if you only make one stop, along with the cost delta.
 - **Cost Comparison Bar Chart**: Visual comparison of the optimized split vs. shopping exclusively at a single store.
 - **Store Route Expanders**: Itemized shopping lists grouped by store with subtotals.
-- **Export Store Lists to AnyList**: A one-click button that creates store-specific sub-lists (e.g. *"Weekly Shop (ALDI)"*) directly in your AnyList account.
+- **Update List or Export Store Sub-Lists to AnyList**: Use **🔄 Update '<list>' in AnyList** to push assigned stores, prices, categories, and quantities directly onto items in your active list, or **📤 Export Store Lists to AnyList** to create store-specific sub-lists (e.g. *"Weekly Shop (ALDI)"*).
 
 ### 4. Price Comparison Tab
 A comprehensive data table detailing:

@@ -25,7 +25,7 @@ A Python library, CLI, and Streamlit application that integrates with **AnyList*
   - **Store Filtering (`allowed_stores`)**: Exclude grocers you don't frequent.
   - **Single-Store Evaluation**: Calculates the best single-store alternative and cost difference.
 - **Smart Item Normalization**: Automatic quantity/unit extraction (e.g. *"Honeycrisp Apples 3 lbs"*) and token fuzzy matching to reconcile free-form AnyList names with store SKUs and flyer deals.
-- **AnyList Sub-List Export**: Automatically export your optimized route into store-specific lists (e.g. *"Weekly Shop (ALDI)"* and *"Weekly Shop (Market Basket)"*) in AnyList.
+- **AnyList Sync & Sub-List Export**: Update your active AnyList items in-place with assigned stores, prices, categories, and quantities, or automatically export store-specific lists (e.g. *"Weekly Shop (ALDI)"* and *"Weekly Shop (Market Basket)"*) in AnyList.
 - **Dual Interfaces**:
   - Interactive **Streamlit Web UI** (`grocery-helper serve`) with a **🏷️ Weekly Sales & Flyers** tab.
   - Scriptable **CLI** (`grocery-helper optimise <list_id>` and `grocery-helper flyers`) with text and JSON outputs.
@@ -102,6 +102,8 @@ grocery_helper/
 │       ├── flyers.py            # Market Basket, Whole Foods & Flipp flyer providers
 │       ├── matcher.py           # Quantity parser and fuzzy string matcher
 │       ├── models.py            # Pydantic data models
+│       ├── open_prices.py       # Open Food Facts Open Prices API client
+│       ├── preferences.py       # Non-secret persistent UI settings store
 │       ├── pricing.py           # Pricing service, providers, and route optimizer
 │       └── utils.py             # Formatting, TTL caching, logging
 ├── tests/                       # Comprehensive test suite (unit + AppTest)
@@ -182,6 +184,10 @@ Settings can be specified in `.env` or passed as environment variables:
 | `ANYLIST_EMAIL` | AnyList account email | `""` |
 | `ANYLIST_PASSWORD` | AnyList account password | `""` |
 | `DEFAULT_STORE_ZIP` | Default ZIP code for grocer lookups | `""` |
+| `DEFAULT_ALLOWED_STORES` | Comma-separated default stores in Allowed Stores | `""` |
+| `DEFAULT_MAX_STORES` | Optional default maximum store stops | `""` |
+| `ADVERTISED_ONLY` | Restrict live-flyer stores to advertised deals only | `false` |
+| `UI_SETTINGS_FILE` | Path to saved non-secret UI preferences JSON | `~/.config/grocery_helper/ui_settings.json` |
 | `PRICE_CACHE_TTL_SECONDS` | In-memory price cache duration | `3600` |
 | `KROGER_CLIENT_ID` | Kroger Developer API Client ID (optional live data) | `""` |
 | `KROGER_CLIENT_SECRET` | Kroger Developer API Client Secret | `""` |
