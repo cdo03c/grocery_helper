@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     # ── Pricing ───────────────────────────────────────────────────────────────
     default_store_zip: str = Field(default="", description="ZIP code for store lookups")
     price_cache_ttl_seconds: int = Field(
-        default=3600, description="How long to cache price results (seconds)"
+        default=3600,
+        ge=0,
+        description="How long to cache price results (seconds)",
     )
 
     # ── Kroger Developer API ─────────────────────────────────────────────────

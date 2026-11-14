@@ -12,12 +12,15 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import contextvars
 import hashlib
 import itertools
 import logging
+import time
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -100,9 +103,17 @@ class MockPricingProvider:
 
     async def get_prices(self, item: GroceryItem, store_zip: str) -> list[StorePrice]:
         """Generate realistic prices for the requested item across configured stores."""
-        parsed_qty, parsed_unit, cleaned_name = parse_quantity_and_unit(item.name)
+        _, parsed_unit, cleaned_name = parse_quantity_and_unit(item.name)
         matched_unit: Unit = parsed_unit or item.unit
-        best_cand, score = find_best_match(cleaned_name, list(self.KNOWN_CATALOG.keys()))
+        catalog_keys = list(self.KNOWN_CATALOG.keys())
+        raw_cand, raw_score = find_best_match(item.name, catalog_keys)
+        cleaned_cand, cleaned_score = find_best_match(cleaned_name, catalog_keys)
+        best_cand: str | None
+        score: float
+        if raw_cand and raw_score >= cleaned_score:
+            best_cand, score = raw_cand, raw_score
+        else:
+            best_cand, score = cleaned_cand, cleaned_score
 
         if best_cand and score >= 0.35:
             base_price, catalog_unit = self.KNOWN_CATALOG[best_cand]
@@ -171,61 +182,116 @@ class KrogerPricingProvider:
         )
         self._base_url = (base_url or settings.kroger_api_base_url).rstrip("/")
         self._http = http_client
+        self._owned_http: httpx.AsyncClient | None = None
+        self._shared_http_var: contextvars.ContextVar[httpx.AsyncClient | None] = (
+            contextvars.ContextVar(f"kroger_shared_http_{id(self)}", default=None)
+        )
         self._access_token: str | None = None
+        self._token_expires_at: float = 0.0
+        self._token_lock = asyncio.Lock()
+        self._location_lock = asyncio.Lock()
         self._location_cache: dict[str, str] = {}
+
+    async def __aenter__(self) -> KrogerPricingProvider:
+        if self._http is None and self._owned_http is None:
+            self._owned_http = httpx.AsyncClient(timeout=10.0)
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Close the internally managed HTTP client if one was created."""
+        if self._owned_http is not None:
+            await self._owned_http.aclose()
+            self._owned_http = None
 
     @property
     def is_configured(self) -> bool:
         """Whether valid client credentials have been supplied."""
         return bool(self._client_id and self._client_secret)
 
-    async def _get_token(self, client: httpx.AsyncClient) -> str:
+    async def _get_token(self, client: httpx.AsyncClient, force_refresh: bool = False) -> str:
         """Acquire an OAuth2 bearer token using client_credentials grant."""
-        if self._access_token:
-            return self._access_token
+        async with self._token_lock:
+            if (
+                not force_refresh
+                and self._access_token
+                and time.monotonic() < self._token_expires_at
+            ):
+                return self._access_token
 
-        creds = f"{self._client_id}:{self._client_secret}"
-        encoded = base64.b64encode(creds.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        res = await client.post(
-            f"{self._base_url}/connect/oauth2/token",
-            data={"grant_type": "client_credentials", "scope": "product.compact"},
-            headers=headers,
-        )
-        if res.status_code != 200:
-            raise RuntimeError(
-                f"Kroger authentication failed with status {res.status_code}: {res.text}"
+            creds = f"{self._client_id}:{self._client_secret}"
+            encoded = base64.b64encode(creds.encode()).decode()
+            headers = {
+                "Authorization": f"Basic {encoded}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            }
+            res = await client.post(
+                f"{self._base_url}/connect/oauth2/token",
+                data={"grant_type": "client_credentials", "scope": "product.compact"},
+                headers=headers,
             )
+            if res.status_code != 200:
+                raise RuntimeError(
+                    f"Kroger authentication failed with status {res.status_code}: {res.text}"
+                )
 
-        token = str(res.json().get("access_token"))
-        self._access_token = token
-        return token
+            payload = res.json()
+            token_raw = payload.get("access_token")
+            if not token_raw:
+                raise RuntimeError("Kroger authentication response missing access_token")
+
+            token = str(token_raw)
+            expires_in = float(payload.get("expires_in", 1800))
+            self._access_token = token
+            self._token_expires_at = time.monotonic() + max(0.0, expires_in - 60.0)
+            return token
+
+    async def _authorized_get(
+        self,
+        client: httpx.AsyncClient,
+        path: str,
+        params: dict[str, Any],
+    ) -> httpx.Response:
+        """Send an authenticated GET request, refreshing the token once on 401."""
+        token = await self._get_token(client)
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        res = await client.get(f"{self._base_url}{path}", params=params, headers=headers)
+        if res.status_code == 401:
+            token = await self._get_token(client, force_refresh=True)
+            headers["Authorization"] = f"Bearer {token}"
+            res = await client.get(f"{self._base_url}{path}", params=params, headers=headers)
+        return res
 
     async def get_location_id(self, client: httpx.AsyncClient, store_zip: str) -> str | None:
         """Find the nearest Kroger store location identifier for the given ZIP code."""
         if store_zip in self._location_cache:
             return self._location_cache[store_zip]
 
-        token = await self._get_token(client)
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        res = await client.get(
-            f"{self._base_url}/locations",
-            params={"filter.zipCode.near": store_zip, "filter.limit": 1},
-            headers=headers,
-        )
-        if res.status_code != 200:
-            return None
+        async with self._location_lock:
+            if store_zip in self._location_cache:
+                return self._location_cache[store_zip]
 
-        data = res.json().get("data", [])
-        if not data:
-            return None
+            res = await self._authorized_get(
+                client,
+                "/locations",
+                params={"filter.zipCode.near": store_zip, "filter.limit": 1},
+            )
+            if res.status_code != 200:
+                return None
 
-        loc_id = str(data[0].get("locationId"))
-        self._location_cache[store_zip] = loc_id
-        return loc_id
+            data = res.json().get("data", [])
+            if not data:
+                return None
+
+            loc_raw = data[0].get("locationId")
+            if not loc_raw:
+                return None
+
+            loc_id = str(loc_raw)
+            self._location_cache[store_zip] = loc_id
+            return loc_id
 
     async def get_prices(self, item: GroceryItem, store_zip: str) -> list[StorePrice]:
         """Fetch live item price from the nearest Kroger location."""
@@ -233,20 +299,18 @@ class KrogerPricingProvider:
             return []
 
         async def _query(client: httpx.AsyncClient) -> list[StorePrice]:
-            token = await self._get_token(client)
             location_id = await self.get_location_id(client, store_zip)
             if not location_id:
                 return []
 
-            headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-            res = await client.get(
-                f"{self._base_url}/products",
+            res = await self._authorized_get(
+                client,
+                "/products",
                 params={
                     "filter.term": item.name,
                     "filter.locationId": location_id,
                     "filter.limit": 1,
                 },
-                headers=headers,
             )
             if res.status_code != 200:
                 return []
@@ -260,12 +324,25 @@ class KrogerPricingProvider:
             if not items:
                 return []
 
-            price_info = items[0].get("price", {})
+            product_item = items[0]
+            price_info = product_item.get("price", {})
             regular_price = price_info.get("regular")
             promo_price = price_info.get("promo")
 
             if regular_price is None:
                 return []
+
+            size_raw = product_item.get("size")
+            _, parsed_unit, _ = (
+                parse_quantity_and_unit(str(size_raw))
+                if size_raw
+                else (
+                    None,
+                    None,
+                    "",
+                )
+            )
+            unit = parsed_unit or item.unit
 
             regular_dec = Decimal(str(regular_price))
             promo_dec = Decimal(str(promo_price)) if promo_price is not None else None
@@ -276,14 +353,15 @@ class KrogerPricingProvider:
                     store_name="Kroger",
                     store_id=f"kroger_{location_id}",
                     price=regular_dec,
-                    unit=item.unit,
+                    unit=unit,
                     sale_price=promo_dec,
                 )
             ]
 
         try:
-            if self._http is not None:
-                return await _query(self._http)
+            active_client = self._shared_http_var.get() or self._http or self._owned_http
+            if active_client is not None:
+                return await _query(active_client)
             async with httpx.AsyncClient(timeout=10.0) as client:
                 return await _query(client)
         except Exception as exc:
@@ -318,16 +396,32 @@ class PricingService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
+    def _cache_key_for(self, item: GroceryItem) -> str:
+        provider_tag = (
+            "MockPricingProvider"
+            if isinstance(self._provider, MockPricingProvider)
+            else f"{type(self._provider).__qualname__}:{id(self._provider)}"
+        )
+        if self._kroger_provider.is_configured:
+            kroger_tag = (
+                "kroger_on"
+                if type(self._kroger_provider) is KrogerPricingProvider
+                else f"kroger_custom:{id(self._kroger_provider)}"
+            )
+        else:
+            kroger_tag = "kroger_off"
+        return cache_key(provider_tag, kroger_tag, item.name, item.unit.value, self._store_zip)
+
     async def fetch_prices(self, item: GroceryItem) -> list[StorePrice]:
         """
         Fetch prices for a single item from all available stores, using
         the in-memory TTL cache if available.
         """
-        key = cache_key(item.name, self._store_zip)
+        key = self._cache_key_for(item)
         cached = get_cached_price(key)
         if cached is not None and isinstance(cached, list):
             logger.debug("Cache hit for '%s' in ZIP %s", item.name, self._store_zip)
-            return list(cached)
+            return [sp.model_copy() for sp in cached]
 
         logger.debug("Fetching prices for '%s' in ZIP %s", item.name, self._store_zip)
         prices = await self._provider.get_prices(item, self._store_zip)
@@ -338,7 +432,7 @@ class PricingService:
             if live_kroger:
                 prices = [p for p in prices if p.store_name != "Kroger"] + live_kroger
 
-        set_cached_price(key, prices)
+        set_cached_price(key, [sp.model_copy() for sp in prices])
         return prices
 
     async def compare(self, item: GroceryItem) -> PriceComparison:
@@ -360,19 +454,41 @@ class PricingService:
             allowed_stores: Optional list or set of store names to restrict search to.
             max_stores: Maximum number of distinct stores to assign items to.
                 If set (e.g. 1 or 2), finds the combination of stores of that
-                size that minimizes total cart cost.
+                size that maximizes covered items and minimizes total cart cost.
 
         Returns an OptimizedCart with store assignments and basket totals.
         """
-        comparisons: list[PriceComparison] = []
+        if max_stores is not None and max_stores < 1:
+            raise ValueError("max_stores must be at least 1")
+
         allowed_set = set(allowed_stores) if allowed_stores is not None else None
 
-        # Fetch comparisons for all items
-        for item in grocery_list.items:
-            comparison = await self.compare(item)
+        # Fetch comparisons concurrently across all items, sharing an HTTP client for Kroger
+        if (
+            isinstance(self._kroger_provider, KrogerPricingProvider)
+            and self._kroger_provider.is_configured
+            and self._kroger_provider._http is None
+            and self._kroger_provider._owned_http is None
+            and self._kroger_provider._shared_http_var.get() is None
+        ):
+            async with httpx.AsyncClient(timeout=10.0) as shared_client:
+                token = self._kroger_provider._shared_http_var.set(shared_client)
+                try:
+                    raw_comparisons = await asyncio.gather(
+                        *(self.compare(item) for item in grocery_list.items)
+                    )
+                finally:
+                    self._kroger_provider._shared_http_var.reset(token)
+        else:
+            raw_comparisons = await asyncio.gather(
+                *(self.compare(item) for item in grocery_list.items)
+            )
+
+        comparisons: list[PriceComparison] = []
+        for comparison in raw_comparisons:
             if allowed_set is not None:
                 filtered_prices = [p for p in comparison.prices if p.store_name in allowed_set]
-                comparison = PriceComparison(item=item, prices=filtered_prices)
+                comparison = PriceComparison(item=comparison.item, prices=filtered_prices)
             comparisons.append(comparison)
 
         # Track single-store totals (across all allowed stores that carry all items)
@@ -385,7 +501,7 @@ class PricingService:
             for sp in comp.prices:
                 store_totals.setdefault(sp.store_name, Decimal("0.00"))
                 store_item_counts.setdefault(sp.store_name, 0)
-                store_totals[sp.store_name] += sp.effective_price * qty
+                store_totals[sp.store_name] += comp.normalized_price(sp) * qty
                 store_item_counts[sp.store_name] += 1
 
         single_store_totals = (
@@ -403,26 +519,32 @@ class PricingService:
 
         # Apply max_stores constraint if requested and fewer than candidate count
         selected_store_subset: set[str] | None = None
-        if max_stores is not None and max_stores > 0 and len(candidate_stores) > max_stores:
+        if max_stores is not None and len(candidate_stores) > max_stores:
+            best_covered_count = -1
             best_subset_cost: Decimal | None = None
             best_subset: tuple[str, ...] | None = None
 
             for store_combo in itertools.combinations(candidate_stores, max_stores):
                 combo_set = set(store_combo)
                 combo_cost = Decimal("0.00")
-                combo_covers_all = True
+                covered_count = 0
 
                 for comp in comparisons:
                     avail = [p for p in comp.prices if p.store_name in combo_set]
                     if not avail:
-                        combo_covers_all = False
-                        break
-                    cheapest_in_combo = min(avail, key=lambda p: p.effective_price)
-                    combo_cost += cheapest_in_combo.effective_price * Decimal(
+                        continue
+                    covered_count += 1
+                    cheapest_in_combo = min(avail, key=comp.normalized_price)
+                    combo_cost += comp.normalized_price(cheapest_in_combo) * Decimal(
                         str(comp.item.quantity)
                     )
 
-                if combo_covers_all and (best_subset_cost is None or combo_cost < best_subset_cost):
+                is_better = covered_count > best_covered_count or (
+                    covered_count == best_covered_count
+                    and (best_subset_cost is None or combo_cost < best_subset_cost)
+                )
+                if is_better:
+                    best_covered_count = covered_count
                     best_subset_cost = combo_cost
                     best_subset = store_combo
 
@@ -442,11 +564,17 @@ class PricingService:
             )
 
             if eligible_prices:
-                cheapest_sp = min(eligible_prices, key=lambda p: p.effective_price)
+                cheapest_sp = min(eligible_prices, key=comp.normalized_price)
+                cheapest_norm = comp.normalized_price(cheapest_sp)
                 store_assignments[comp.item.id] = cheapest_sp.store_name
-                total_cost += cheapest_sp.effective_price * qty
-                if comp.savings:
-                    estimated_savings += comp.savings * qty
+                total_cost += cheapest_norm * qty
+                if len(comp.prices) >= 2:
+                    most_expensive_sp = max(comp.prices, key=comp.normalized_price)
+                    item_savings = max(
+                        Decimal("0.00"),
+                        comp.normalized_price(most_expensive_sp) - cheapest_norm,
+                    )
+                    estimated_savings += item_savings * qty
 
         return OptimizedCart(
             list_id=grocery_list.id,

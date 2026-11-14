@@ -39,7 +39,7 @@ def parse_quantity_and_unit(raw_name: str) -> tuple[float | None, Unit | None, s
 
     # Match numeric quantity attached to or preceding a unit, e.g. "3 lbs" or "3.5 lb" or "12pk"
     for pattern, unit in UNIT_PATTERNS.items():
-        qty_unit_pattern = rf"(\d+(?:\.\d+)?)\s*(?:{pattern})\b"
+        qty_unit_pattern = rf"\b(\d+(?:\.\d+)?)\s*(?:{pattern})\b(?!-)"
         match = re.search(qty_unit_pattern, clean_name, re.IGNORECASE)
         if match:
             try:
@@ -54,7 +54,7 @@ def parse_quantity_and_unit(raw_name: str) -> tuple[float | None, Unit | None, s
     # If no quantity was attached to unit, check for standalone unit
     if detected_unit is None:
         for pattern, unit in UNIT_PATTERNS.items():
-            standalone_pattern = rf"\b(?:{pattern})\b"
+            standalone_pattern = rf"(?<!-)\b(?:{pattern})\b(?!-)"
             if re.search(standalone_pattern, clean_name, re.IGNORECASE):
                 detected_unit = unit
                 clean_name = re.sub(standalone_pattern, "", clean_name, flags=re.IGNORECASE).strip()
@@ -83,6 +83,9 @@ def calculate_match_score(query: str, candidate: str) -> float:
     q_norm = normalize_item_name(query)
     c_norm = normalize_item_name(candidate)
 
+    if not q_norm or not c_norm:
+        return 0.0
+
     if q_norm == c_norm:
         return 1.0
 
@@ -93,13 +96,16 @@ def calculate_match_score(query: str, candidate: str) -> float:
     if not q_tokens or not c_tokens:
         return 0.0
 
-    token_overlap = len(q_tokens & c_tokens) / max(len(q_tokens), len(c_tokens))
+    common = len(q_tokens & c_tokens)
+    max_overlap = common / max(len(q_tokens), len(c_tokens))
+    containment = common / min(len(q_tokens), len(c_tokens))
 
     # Difflib sequence similarity ratio
     seq_ratio = difflib.SequenceMatcher(None, q_norm, c_norm).ratio()
 
-    # Blend token overlap and sequence ratio (giving slight preference to token overlap)
-    return float(0.6 * token_overlap + 0.4 * seq_ratio)
+    # Blend max-token overlap, subset containment, and sequence ratio so descriptive
+    # item names (e.g. "fresh organic whole milk") still match concise catalog keys ("milk").
+    return float(0.4 * max_overlap + 0.3 * containment + 0.3 * seq_ratio)
 
 
 def find_best_match(

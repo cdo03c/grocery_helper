@@ -173,6 +173,7 @@ class AnyListClient:
     async def __aexit__(self, *_: Any) -> None:
         if self._http:
             await self._http.aclose()
+            self._http = None
 
     # ── Auth ────────────────────────────────----------------──────────────────
 
@@ -229,18 +230,7 @@ class AnyListClient:
         if self._demo_mode:
             return list(self._demo_store.values())
 
-        if not self._http:
-            raise RuntimeError("Client not started.")
-
-        try:
-            response = await self._http.post("/data/shopping-lists/get", data={})
-        except httpx.RequestError as exc:
-            raise AnyListAPIError(f"Network error fetching lists: {exc}") from exc
-
-        if response.status_code in (401, 403):
-            raise AnyListAuthError("Session expired or unauthorised.")
-        if response.status_code != 200:
-            raise AnyListAPIError(f"Failed to fetch lists: {response.text}")
+        response = await self._post("/data/shopping-lists/get", data={}, action="fetch lists")
 
         data = response.json()
         raw_lists = data.get("shoppingLists") or data.get("lists") or []
@@ -254,7 +244,16 @@ class AnyListClient:
             for raw_item in raw.get("items", []):
                 item_id = str(raw_item.get("identifier") or raw_item.get("id") or uuid.uuid4().hex)
                 item_name = str(raw_item.get("name") or "Unknown Item")
-                qty = float(raw_item.get("quantity") or 1.0)
+                raw_qty = raw_item.get("quantity")
+                try:
+                    qty = max(0.0, float(raw_qty)) if raw_qty is not None else 1.0
+                except (TypeError, ValueError):
+                    qty = 1.0
+                raw_unit = raw_item.get("unit")
+                try:
+                    unit = Unit(raw_unit) if raw_unit else Unit.EACH
+                except ValueError:
+                    unit = Unit.EACH
                 category = raw_item.get("category")
                 notes = raw_item.get("details") or raw_item.get("notes")
                 checked = bool(raw_item.get("checked", False))
@@ -264,7 +263,7 @@ class AnyListClient:
                         id=item_id,
                         name=item_name,
                         quantity=qty,
-                        unit=Unit.EACH,
+                        unit=unit,
                         category=category,
                         notes=notes,
                         checked=checked,
@@ -299,19 +298,13 @@ class AnyListClient:
             lst.items.append(item)
             return item
 
-        if not self._http:
-            raise RuntimeError("Client not started.")
-
         payload = {
             "listId": list_id,
             "name": item.name,
             "quantity": str(item.quantity),
             "details": item.notes or "",
         }
-        response = await self._http.post("/data/shopping-lists/add-item", data=payload)
-        if response.status_code != 200:
-            raise AnyListAPIError(f"Failed to add item: {response.text}")
-
+        await self._post("/data/shopping-lists/add-item", data=payload, action="add item")
         return item
 
     async def remove_item(self, list_id: str, item_id: str) -> None:
@@ -323,13 +316,8 @@ class AnyListClient:
             lst.items = [i for i in lst.items if i.id != item_id]
             return
 
-        if not self._http:
-            raise RuntimeError("Client not started.")
-
         payload = {"listId": list_id, "itemId": item_id}
-        response = await self._http.post("/data/shopping-lists/delete-item", data=payload)
-        if response.status_code != 200:
-            raise AnyListAPIError(f"Failed to remove item: {response.text}")
+        await self._post("/data/shopping-lists/delete-item", data=payload, action="remove item")
 
     async def update_item(self, list_id: str, item: GroceryItem) -> GroceryItem:
         """Update an existing item on a list."""
@@ -343,9 +331,6 @@ class AnyListClient:
                     return item
             raise AnyListAPIError(f"Item '{item.id}' not found on list '{list_id}'.")
 
-        if not self._http:
-            raise RuntimeError("Client not started.")
-
         payload = {
             "listId": list_id,
             "itemId": item.id,
@@ -354,10 +339,7 @@ class AnyListClient:
             "details": item.notes or "",
             "checked": "1" if item.checked else "0",
         }
-        response = await self._http.post("/data/shopping-lists/update-item", data=payload)
-        if response.status_code != 200:
-            raise AnyListAPIError(f"Failed to update item: {response.text}")
-
+        await self._post("/data/shopping-lists/update-item", data=payload, action="update item")
         return item
 
     async def create_list(self, name: str) -> GroceryList:
@@ -370,13 +352,10 @@ class AnyListClient:
             self._demo_store[new_id] = new_list
             return new_list
 
-        if not self._http:
-            raise RuntimeError("Client not started.")
-
         payload = {"name": name}
-        response = await self._http.post("/data/shopping-lists/create", data=payload)
-        if response.status_code != 200:
-            raise AnyListAPIError(f"Failed to create list: {response.text}")
+        response = await self._post(
+            "/data/shopping-lists/create", data=payload, action="create list"
+        )
 
         data = response.json()
         list_id = str(data.get("identifier") or data.get("id") or uuid.uuid4().hex)
@@ -417,6 +396,29 @@ class AnyListClient:
         return created_lists
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    async def _post(
+        self,
+        path: str,
+        *,
+        data: dict[str, Any],
+        action: str,
+    ) -> httpx.Response:
+        """Send an authenticated POST request with unified error handling."""
+        if not self._http:
+            raise RuntimeError("Client not started.")
+
+        try:
+            response = await self._http.post(path, data=data)
+        except httpx.RequestError as exc:
+            raise AnyListAPIError(f"Network error during {action}: {exc}") from exc
+
+        if response.status_code in (401, 403):
+            raise AnyListAuthError("Session expired or unauthorised.")
+        if response.status_code != 200:
+            raise AnyListAPIError(f"Failed to {action}: {response.text}")
+
+        return response
 
     def _require_auth(self) -> None:
         if not self._session_token:

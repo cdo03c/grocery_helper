@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.0] - 2026-11-14
+
+### Fixed
+- **Streamlit UI & Route Consistency (`grocery_helper.app`, `grocery_helper.cli`)**:
+  - Fixed `StreamlitAPIException` crash when selecting 0 or 1 allowed stores in the sidebar (`max_stores` slider bounds).
+  - Updated Shopping Route UI and CLI text table to render assigned stores and prices from `cart.store_assignments` instead of unconstrained `comp.cheapest`, using `Decimal` arithmetic for subtotals.
+  - Persisted demo-mode AnyList state and stable list-ID selection across Streamlit reruns so added items and exported sub-lists are retained.
+  - Replaced unsafe `run_async` fallback so coroutine `RuntimeError`s are not masked and active event loops are handled cleanly.
+  - Added unified error handling around item creation and split-list exports.
+- **Pricing Optimizer & Cache Safety (`grocery_helper.pricing`, `grocery_helper.utils`)**:
+  - Calculated `estimated_savings` relative to each item's assigned store price under `max_stores` constraints.
+  - Enforced `max_stores` even when items lack prices or subsets provide partial coverage; validated `max_stores >= 1`.
+  - Isolated in-memory price cache keys by unit and provider configuration, added `threading.RLock` synchronization, and exposed `clear_price_cache()`.
+  - Guarded `KrogerPricingProvider` against missing tokens/locations and added token expiry tracking and 401 refresh retries.
+  - Fixed `truncate(..., max_len=0)` edge case and prevented punctuation-only strings or hyphenated prefixes (e.g. `L-Carnitine`) from false-matching in `matcher.py`.
+- **AnyList Live Client (`grocery_helper.anylist_client`)**:
+  - Unified network/auth error handling (`httpx.RequestError` and `401/403`) across `add_item`, `remove_item`, `update_item`, and `create_list`.
+  - Preserved `0` item quantities and item units when parsing `/data/shopping-lists/get` responses, and cleared `_http` on `__aexit__`.
+
+### Improved
+- **Unit-Aware Price Comparison (`grocery_helper.models`, `grocery_helper.pricing`)**:
+  - Added `convert_unit_price()`, `PriceComparison.normalized_price()`, and `PriceComparison.has_unit_mismatch` to normalize comparable volume (`gallon` ↔ `liter`) and weight (`lb` ↔ `oz`) prices.
+  - Improved catalog matching for pack-suffixed items (e.g. `Soda 12pk`) and descriptive names via containment-weighted token scoring in `matcher.py`.
+- **Performance & Tooling**:
+  - Parallelized item price fetches via `asyncio.gather` and added shared `httpx.AsyncClient` connection pooling for `KrogerPricingProvider` during `PricingService.optimise()`.
+  - Cached live AnyList list fetches in Streamlit `session_state` with a manual refresh button and extracted pure view-model helpers (`build_comparison_rows`, `group_cart_by_store`).
+  - Consolidated duplicate `dev` dependency definitions in `pyproject.toml` and optimized `.github/workflows/docs.yml` with `concurrency` and `--no-install-project --only-group docs`.
+
+---
+
 ## [0.0.0] - 2026-11-08
 
 Initial release of **Grocery Helper** — a Python library, CLI, and Streamlit application that connects to AnyList, compares grocery prices across stores, and computes optimal shopping routes.

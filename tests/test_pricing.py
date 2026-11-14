@@ -221,3 +221,205 @@ async def test_pricing_service_overlays_live_kroger() -> None:
     kroger_prices = [p for p in prices if p.store_name == "Kroger"]
     assert len(kroger_prices) == 1
     assert kroger_prices[0].price == Decimal("1.49")
+
+
+@pytest.mark.asyncio
+async def test_optimise_max_stores_savings_reflects_assigned_store() -> None:
+    """When max_stores forces a non-cheapest item, estimated_savings uses the assigned price."""
+    mock_provider = AsyncMock()
+
+    async def get_prices(item: GroceryItem, store_zip: str) -> list[StorePrice]:
+        if item.name == "Milk":
+            return [
+                StorePrice(item_name="Milk", store_name="Store A", price=Decimal("2.00")),
+                StorePrice(item_name="Milk", store_name="Store B", price=Decimal("5.00")),
+            ]
+        return [
+            StorePrice(item_name="Bread", store_name="Store A", price=Decimal("10.00")),
+            StorePrice(item_name="Bread", store_name="Store B", price=Decimal("1.00")),
+        ]
+
+    mock_provider.get_prices.side_effect = get_prices
+    service = PricingService(store_zip="90210", provider=mock_provider)
+    cart = await service.optimise(make_list(), max_stores=1)
+
+    # Store B total: 2 * 5.00 + 1 * 1.00 = 11.00 (cheaper than Store A: 2*2.00 + 1*10.00 = 14.00)
+    assert cart.stores_used == ["Store B"]
+    assert cart.total_cost == Decimal("11.00")
+    # Milk at Store B is the most expensive ($5.00), so savings on Milk is $0.00.
+    # Bread at Store B saves $10.00 - $1.00 = $9.00.
+    assert cart.estimated_savings == Decimal("9.00")
+
+
+@pytest.mark.asyncio
+async def test_optimise_max_stores_enforced_with_partial_coverage() -> None:
+    """max_stores must never be exceeded even when no subset covers 100% of items."""
+    mock_provider = AsyncMock()
+
+    async def get_prices(item: GroceryItem, store_zip: str) -> list[StorePrice]:
+        if item.name == "Milk":
+            return [StorePrice(item_name="Milk", store_name="Store A", price=Decimal("3.00"))]
+        return [StorePrice(item_name="Bread", store_name="Store B", price=Decimal("2.00"))]
+
+    mock_provider.get_prices.side_effect = get_prices
+    service = PricingService(store_zip="90210", provider=mock_provider)
+    cart = await service.optimise(make_list(), max_stores=1)
+
+    assert len(cart.stores_used) == 1
+
+
+@pytest.mark.asyncio
+async def test_optimise_invalid_max_stores_raises() -> None:
+    """max_stores < 1 should raise ValueError."""
+    service = PricingService(store_zip="90210")
+    with pytest.raises(ValueError, match="at least 1"):
+        await service.optimise(make_list(), max_stores=0)
+
+
+@pytest.mark.asyncio
+async def test_pricing_cache_isolated_by_unit_and_provider() -> None:
+    """Cache keys should isolate different units and distinct provider instances."""
+    provider_a = AsyncMock()
+    provider_a.get_prices.return_value = [
+        StorePrice(item_name="Milk", store_name="ALDI", price=Decimal("3.49"), unit=Unit.GALLON)
+    ]
+    provider_b = AsyncMock()
+    provider_b.get_prices.return_value = [
+        StorePrice(item_name="Milk", store_name="ALDI", price=Decimal("1.99"), unit=Unit.LITER)
+    ]
+
+    service_a = PricingService(store_zip="90210", provider=provider_a)
+    service_b = PricingService(store_zip="90210", provider=provider_b)
+
+    res_a = await service_a.fetch_prices(GroceryItem(id="1", name="Milk", unit=Unit.GALLON))
+    res_b = await service_b.fetch_prices(GroceryItem(id="2", name="Milk", unit=Unit.LITER))
+
+    assert res_a[0].price == Decimal("3.49")
+    assert res_b[0].price == Decimal("1.99")
+    assert provider_a.get_prices.call_count == 1
+    assert provider_b.get_prices.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_kroger_provider_missing_token_returns_empty() -> None:
+    """Missing access_token in Kroger OAuth response should fail gracefully in get_prices."""
+    import httpx
+
+    from grocery_helper.pricing import KrogerPricingProvider
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "/connect/oauth2/token" in str(request.url):
+            return httpx.Response(200, json={})
+        return httpx.Response(404)
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = KrogerPricingProvider(
+        client_id="cid",
+        client_secret="sec",
+        base_url="https://api.kroger.com/v1",
+        http_client=mock_client,
+    )
+    prices = await provider.get_prices(GroceryItem(id="k1", name="Milk"), "45202")
+    assert prices == []
+    assert provider._access_token is None
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_prefers_exact_pack_catalog_match() -> None:
+    """'Soda 12pk' should match the 'soda 12pk' catalog price rather than generic 'soda'."""
+    provider = MockPricingProvider()
+    soda = await provider.get_prices(GroceryItem(id="s1", name="Soda", unit=Unit.PACK), "90210")
+    soda_12pk = await provider.get_prices(
+        GroceryItem(id="s2", name="Soda 12pk", unit=Unit.PACK), "90210"
+    )
+    assert soda_12pk != soda
+
+
+@pytest.mark.asyncio
+async def test_optimise_normalizes_convertible_units() -> None:
+    """Optimiser should normalize weight/volume store prices to the requested item unit."""
+    mock_provider = AsyncMock()
+    mock_provider.get_prices.return_value = [
+        StorePrice(item_name="Apples", store_name="Store A", price=Decimal("2.00"), unit=Unit.LB),
+        # $0.25/oz = $4.00/lb
+        StorePrice(item_name="Apples", store_name="Store B", price=Decimal("0.25"), unit=Unit.OZ),
+    ]
+    service = PricingService(store_zip="90210", provider=mock_provider)
+    g_list = GroceryList(
+        id="l_unit",
+        name="Unit Test",
+        items=[GroceryItem(id="a1", name="Apples", quantity=2.0, unit=Unit.LB)],
+    )
+    cart = await service.optimise(g_list)
+    assert cart.store_assignments["a1"] == "Store A"
+    assert cart.total_cost == Decimal("4.00")
+    assert cart.estimated_savings == Decimal("4.00")
+
+
+@pytest.mark.asyncio
+async def test_kroger_provider_retries_on_401_and_parses_size() -> None:
+    """KrogerPricingProvider should refresh expired tokens on 401 and parse size units."""
+    import httpx
+
+    from grocery_helper.pricing import KrogerPricingProvider
+
+    token_calls = 0
+    product_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal token_calls, product_calls
+        url = str(request.url)
+        if "/connect/oauth2/token" in url:
+            token_calls += 1
+            return httpx.Response(
+                200, json={"access_token": f"tok_{token_calls}", "expires_in": 1800}
+            )
+        if "/locations" in url:
+            return httpx.Response(200, json={"data": [{"locationId": "loc_1"}]})
+        if "/products" in url:
+            product_calls += 1
+            if product_calls == 1:
+                return httpx.Response(401, json={"error": "expired"})
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "items": [
+                                {
+                                    "size": "16 oz",
+                                    "price": {"regular": 3.50},
+                                }
+                            ]
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = KrogerPricingProvider(
+        client_id="cid",
+        client_secret="sec",
+        base_url="https://api.kroger.com/v1",
+        http_client=mock_client,
+    )
+    prices = await provider.get_prices(GroceryItem(id="k2", name="Cheese", unit=Unit.PACK), "45202")
+    assert len(prices) == 1
+    assert prices[0].unit == Unit.OZ
+    assert token_calls == 2
+    assert product_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_kroger_provider_context_manager_lifecycle() -> None:
+    """KrogerPricingProvider async context manager creates and closes its owned client."""
+    from grocery_helper.pricing import KrogerPricingProvider
+
+    provider = KrogerPricingProvider(client_id="cid", client_secret="sec")
+    async with provider:
+        owned = provider._owned_http
+        assert owned is not None
+        assert not owned.is_closed
+    assert owned.is_closed
+    assert provider._owned_http is None

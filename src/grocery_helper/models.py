@@ -7,7 +7,7 @@ Pydantic data models for groceries, stores, and pricing.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -26,6 +26,33 @@ class Unit(StrEnum):
     GALLON = "gallon"
     LITER = "liter"
     PACK = "pack"
+
+
+_VOLUME_TO_LITERS: dict[Unit, Decimal] = {
+    Unit.LITER: Decimal("1"),
+    Unit.GALLON: Decimal("3.785411784"),
+}
+
+_WEIGHT_TO_OZ: dict[Unit, Decimal] = {
+    Unit.OZ: Decimal("1"),
+    Unit.LB: Decimal("16"),
+}
+
+
+def convert_unit_price(price: Decimal, from_unit: Unit, to_unit: Unit) -> Decimal | None:
+    """
+    Convert a unit price from *from_unit* to *to_unit* if both belong to the
+    same measurement dimension (volume or weight). Returns None otherwise.
+    """
+    if from_unit == to_unit:
+        return price
+
+    for factors in (_VOLUME_TO_LITERS, _WEIGHT_TO_OZ):
+        if from_unit in factors and to_unit in factors:
+            converted = (price / factors[from_unit]) * factors[to_unit]
+            return converted.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -78,23 +105,40 @@ class PriceComparison(BaseModel):
     item: GroceryItem
     prices: list[StorePrice] = Field(default_factory=list)
 
+    def normalized_price(self, store_price: StorePrice) -> Decimal:
+        """Return effective price normalized to the item's unit when convertible."""
+        converted = convert_unit_price(
+            store_price.effective_price,
+            store_price.unit,
+            self.item.unit,
+        )
+        return converted if converted is not None else store_price.effective_price
+
+    @property
+    def has_unit_mismatch(self) -> bool:
+        """Whether any store price uses a non-convertible unit different from the item's."""
+        return any(
+            convert_unit_price(sp.effective_price, sp.unit, self.item.unit) is None
+            for sp in self.prices
+        )
+
     @property
     def cheapest(self) -> StorePrice | None:
-        """Return the StorePrice entry with the lowest effective price."""
+        """Return the StorePrice entry with the lowest unit-normalized effective price."""
         if not self.prices:
             return None
-        return min(self.prices, key=lambda p: p.effective_price)
+        return min(self.prices, key=self.normalized_price)
 
     @property
     def savings(self) -> Decimal | None:
-        """Potential savings between most expensive and cheapest option."""
+        """Potential unit-normalized savings between most expensive and cheapest option."""
         if len(self.prices) < 2:
             return None
         cheapest = self.cheapest
-        most_expensive = max(self.prices, key=lambda p: p.effective_price)
         if cheapest is None:
             return None
-        return most_expensive.effective_price - cheapest.effective_price
+        most_expensive = max(self.prices, key=self.normalized_price)
+        return self.normalized_price(most_expensive) - self.normalized_price(cheapest)
 
 
 class OptimizedCart(BaseModel):

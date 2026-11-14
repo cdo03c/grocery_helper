@@ -92,6 +92,23 @@ class TestCmdOptimise:
             cmd_optimise(args)
         assert exc_info.value.code == 1
 
+    def test_optimise_max_stores_text_output_shows_assigned_store(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        args = build_parser().parse_args(["optimise", "list_001", "--demo", "--max-stores", "1"])
+        cmd_optimise(args)
+        out = capsys.readouterr().out
+        # Best single store for list_001 is ALDI; every assigned item row should reflect ALDI
+        assert "Assigned Store" in out
+        assert "ALDI" in out
+        assert "Whole Foods" not in out.split("Single-Store Basket Totals")[0]
+
+    def test_optimise_invalid_max_stores_exits(self) -> None:
+        args = build_parser().parse_args(["optimise", "list_001", "--demo", "--max-stores", "0"])
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_optimise(args)
+        assert exc_info.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # cmd_serve
@@ -115,6 +132,13 @@ class TestCmdServe:
             cmd_serve(args)
             _, kwargs = mock_run.call_args
             assert kwargs.get("check") is True
+
+    def test_missing_streamlit_exits(self) -> None:
+        args = build_parser().parse_args(["serve"])
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            with pytest.raises(SystemExit) as exc_info:
+                cmd_serve(args)
+            assert exc_info.value.code == 1
 
 
 # ---------------------------------------------------------------------------

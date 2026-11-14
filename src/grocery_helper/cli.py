@@ -14,13 +14,15 @@ import argparse
 import asyncio
 import json
 import logging
+import subprocess
 import sys
 from decimal import Decimal
+from pathlib import Path
 
 from grocery_helper.anylist_client import AnyListAPIError, AnyListAuthError, AnyListClient
 from grocery_helper.config import settings
 from grocery_helper.pricing import PricingService
-from grocery_helper.utils import configure_logging, format_currency
+from grocery_helper.utils import configure_logging, format_currency, truncate
 
 logger = logging.getLogger(__name__)
 
@@ -79,22 +81,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def cmd_serve(args: argparse.Namespace) -> None:
     """Launch the Streamlit app programmatically."""
-    import subprocess
-
-    import grocery_helper.app as _app_module
-
-    subprocess.run(
-        [
-            "streamlit",
-            "run",
-            _app_module.__file__,
-            "--server.port",
-            str(args.port),
-            "--server.address",
-            args.host,
-        ],
-        check=True,
-    )
+    app_path = Path(__file__).with_name("app.py")
+    try:
+        subprocess.run(
+            [
+                "streamlit",
+                "run",
+                str(app_path),
+                "--server.port",
+                str(args.port),
+                "--server.address",
+                args.host,
+            ],
+            check=True,
+        )
+    except FileNotFoundError:
+        print("Error: 'streamlit' executable not found on PATH.", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as exc:
+        sys.exit(exc.returncode)
 
 
 async def _async_optimise(args: argparse.Namespace) -> int:
@@ -112,11 +117,15 @@ async def _async_optimise(args: argparse.Namespace) -> int:
         print(f"Error: {err}", file=sys.stderr)
         return 1
 
-    cart = await pricing.optimise(
-        grocery_list,
-        allowed_stores=args.allowed_stores,
-        max_stores=args.max_stores,
-    )
+    try:
+        cart = await pricing.optimise(
+            grocery_list,
+            allowed_stores=args.allowed_stores,
+            max_stores=args.max_stores,
+        )
+    except ValueError as err:
+        print(f"Error: {err}", file=sys.stderr)
+        return 1
 
     if args.as_json:
         data = cart.model_dump(mode="json")
@@ -125,25 +134,38 @@ async def _async_optimise(args: argparse.Namespace) -> int:
         return 0
 
     mode_str = "Demo Mode" if is_demo else "Live AnyList"
-    print("=" * 70)
+    print("=" * 74)
     print(f"🛒 Grocery Helper: {grocery_list.name} ({len(grocery_list.items)} items)")
     print(f"ZIP Code: {args.store_zip} | Mode: {mode_str}")
-    print("=" * 70)
-    print(f"{'Item':<24} {'Qty':<6} {'Best Store':<16} {'Price':<10} {'Savings'}")
-    print("-" * 70)
+    print("=" * 74)
+    print(f"{'Item':<24} {'Qty':<10} {'Assigned Store':<16} {'Price':<10} {'Savings'}")
+    print("-" * 74)
 
     for comp in cart.comparisons:
-        cheapest_store = comp.cheapest.store_name if comp.cheapest else "N/A"
-        effective_price = format_currency(comp.cheapest.effective_price) if comp.cheapest else "-"
+        assigned_store = cart.store_assignments.get(comp.item.id)
+        assigned_sp = next(
+            (p for p in comp.prices if p.store_name == assigned_store),
+            comp.cheapest,
+        )
+        store_label = assigned_sp.store_name if assigned_sp else "N/A"
+        assigned_price = comp.normalized_price(assigned_sp) if assigned_sp else None
+        effective_price = format_currency(assigned_price) if assigned_price is not None else "-"
         qty_dec = Decimal(str(comp.item.quantity))
-        savings_str = format_currency(comp.savings * qty_dec) if comp.savings else "None"
+
+        savings_str = "None"
+        if assigned_price is not None and len(comp.prices) >= 2:
+            max_price = max(comp.normalized_price(p) for p in comp.prices)
+            item_savings = max(Decimal("0.00"), max_price - assigned_price) * qty_dec
+            if item_savings > 0:
+                savings_str = format_currency(item_savings)
+
         qty_str = f"{comp.item.quantity:g} {comp.item.unit}"
         print(
-            f"{comp.item.name:<24} {qty_str:<6} {cheapest_store:<16} "
+            f"{truncate(comp.item.name, 23):<24} {qty_str:<10} {store_label:<16} "
             f"{effective_price:<10} {savings_str}"
         )
 
-    print("-" * 70)
+    print("-" * 74)
     print(
         f"Optimised Split Basket: {format_currency(cart.total_cost)} "
         f"(Potential Savings: {format_currency(cart.estimated_savings)})"

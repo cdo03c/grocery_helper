@@ -9,6 +9,7 @@ from grocery_helper.models import (
     PriceComparison,
     StorePrice,
     Unit,
+    convert_unit_price,
 )
 
 
@@ -66,3 +67,41 @@ class TestPriceComparison:
         comp = PriceComparison(item=make_item(), prices=[])
         assert comp.cheapest is None
         assert comp.savings is None
+
+    def test_unit_normalized_cheapest_and_savings(self) -> None:
+        item = GroceryItem(id="m1", name="Milk", quantity=1.0, unit=Unit.GALLON)
+        prices = [
+            StorePrice(
+                item_name="Milk", store_name="Store A", price=Decimal("3.49"), unit=Unit.GALLON
+            ),
+            # $1.49 / liter * 3.785411784 = $5.64 / gallon
+            StorePrice(
+                item_name="Milk", store_name="Store B", price=Decimal("1.49"), unit=Unit.LITER
+            ),
+        ]
+        comp = PriceComparison(item=item, prices=prices)
+        assert comp.cheapest is not None
+        assert comp.cheapest.store_name == "Store A"
+        assert comp.savings == Decimal("2.15")
+        assert comp.has_unit_mismatch is False
+
+    def test_has_unit_mismatch_for_incompatible_units(self) -> None:
+        item = GroceryItem(id="m1", name="Milk", quantity=1.0, unit=Unit.GALLON)
+        comp = PriceComparison(
+            item=item,
+            prices=[
+                StorePrice(
+                    item_name="Milk", store_name="Store A", price=Decimal("3.49"), unit=Unit.EACH
+                )
+            ],
+        )
+        assert comp.has_unit_mismatch is True
+
+
+class TestConvertUnitPrice:
+    def test_weight_conversion(self) -> None:
+        assert convert_unit_price(Decimal("0.50"), Unit.OZ, Unit.LB) == Decimal("8.00")
+        assert convert_unit_price(Decimal("4.00"), Unit.LB, Unit.OZ) == Decimal("0.25")
+
+    def test_incompatible_units_return_none(self) -> None:
+        assert convert_unit_price(Decimal("2.00"), Unit.EACH, Unit.GALLON) is None

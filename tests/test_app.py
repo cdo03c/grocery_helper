@@ -113,3 +113,96 @@ class TestListSelectorAndResults:
         assert not at.exception
         labels = [m.label for m in at.metric]
         assert "Optimised Basket Total" in labels
+
+    def test_single_and_empty_allowed_stores_do_not_crash(self, at: AppTest) -> None:
+        """Selecting 1 or 0 allowed stores must not crash the max_stores slider."""
+        at.run()
+        at.multiselect(key="allowed_stores_filter").set_value(["ALDI"]).run()
+        assert not at.exception
+
+        at.multiselect(key="allowed_stores_filter").set_value([]).run()
+        assert not at.exception
+        warnings = [w.value for w in at.warning]
+        assert any("Select at least one store" in w for w in warnings)
+
+    def test_add_item_persists_in_demo_mode_and_keeps_selection(self, at: AppTest) -> None:
+        """Adding an item in demo mode should persist across rerun and keep list selected."""
+        at.run()
+        at.selectbox[0].select_index(1).run()
+        assert not at.exception
+
+        # Populate the add_item_form text_input (first non-sidebar text_input)
+        item_name_inputs = [ti for ti in at.text_input if ti.key is None]
+        assert len(item_name_inputs) >= 1
+        item_name_inputs[0].set_value("Greek Yogurt")
+        submit_buttons = [b for b in at.button if "Add to List" in b.label]
+        assert len(submit_buttons) == 1
+        submit_buttons[0].click().run()
+
+        assert not at.exception
+        assert len(at.dataframe) >= 1
+        df = at.dataframe[0].value
+        assert "Greek Yogurt" in df["Item"].tolist()
+
+    def test_max_stores_constraint_matches_route_expanders(self, at: AppTest) -> None:
+        """Setting max_stores=1 must constrain Shopping Route expanders to a single store."""
+        at.run()
+        at.slider(key="max_stores_slider").set_value(1).run()
+        at.selectbox[0].select_index(1).run()
+        assert not at.exception
+
+        route_expanders = [e for e in at.expander if "Total:" in e.label]
+        assert len(route_expanders) == 1
+
+
+class TestAppViewModels:
+    def test_build_comparison_rows_and_group_cart_by_store(self) -> None:
+        """Pure view-model helpers respect assigned stores and Decimal subtotals."""
+        from decimal import Decimal
+
+        from grocery_helper.app import build_comparison_rows, group_cart_by_store
+        from grocery_helper.models import (
+            GroceryItem,
+            OptimizedCart,
+            PriceComparison,
+            StorePrice,
+            Unit,
+        )
+
+        milk = GroceryItem(id="i1", name="Milk", quantity=2.0, unit=Unit.GALLON, category="Dairy")
+        comp = PriceComparison(
+            item=milk,
+            prices=[
+                StorePrice(
+                    item_name="Milk",
+                    store_name="ALDI",
+                    price=Decimal("3.50"),
+                    unit=Unit.GALLON,
+                ),
+                StorePrice(
+                    item_name="Milk",
+                    store_name="Kroger",
+                    price=Decimal("4.00"),
+                    sale_price=Decimal("3.00"),
+                    unit=Unit.GALLON,
+                ),
+            ],
+        )
+        cart = OptimizedCart(
+            list_id="l1",
+            store_assignments={"i1": "ALDI"},
+            total_cost=Decimal("7.00"),
+            estimated_savings=Decimal("0.00"),
+            comparisons=[comp],
+            max_stores_constraint=1,
+        )
+
+        rows = build_comparison_rows(cart)
+        assert len(rows) == 1
+        assert rows[0]["Assigned Store"] == "ALDI"
+        assert rows[0]["Cheapest Store"] == "Kroger"
+        assert "(Sale)" in rows[0]["Kroger"]
+
+        items_by_store, subtotals = group_cart_by_store(cart)
+        assert list(items_by_store.keys()) == ["ALDI"]
+        assert subtotals["ALDI"] == Decimal("7.00")

@@ -78,6 +78,7 @@ class TestContextManager:
             http = client._http
             assert http is not None
         assert http.is_closed
+        assert client._http is None
 
     @pytest.mark.asyncio
     async def test_aexit_handles_none_http(self) -> None:
@@ -345,3 +346,77 @@ class TestHTTPOperations:
             await client.add_item("list_1", item)
             await client.update_item("list_1", item)
             await client.remove_item("list_1", "item_live")
+
+    @pytest.mark.asyncio
+    async def test_crud_unauthorized_raises_auth_error(self) -> None:
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/data/users/login":
+                    return httpx.Response(200, json={"token": "test_tok"})
+                return httpx.Response(401, text="Unauthorized")
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+
+            item = GroceryItem(id="item_live", name="Coffee")
+            with pytest.raises(AnyListAuthError):
+                await client.add_item("list_1", item)
+            with pytest.raises(AnyListAuthError):
+                await client.remove_item("list_1", "item_live")
+            with pytest.raises(AnyListAuthError):
+                await client.update_item("list_1", item)
+            with pytest.raises(AnyListAuthError):
+                await client.create_list("New List")
+
+    @pytest.mark.asyncio
+    async def test_crud_network_error_raises_api_error(self) -> None:
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/data/users/login":
+                    return httpx.Response(200, json={"token": "test_tok"})
+                raise httpx.ConnectError("connection lost", request=request)
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+
+            item = GroceryItem(id="item_live", name="Coffee")
+            with pytest.raises(AnyListAPIError, match="Network error"):
+                await client.add_item("list_1", item)
+
+    @pytest.mark.asyncio
+    async def test_get_lists_preserves_zero_quantity_and_unit(self) -> None:
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/data/users/login":
+                    return httpx.Response(200, json={"token": "test_tok"})
+                return httpx.Response(
+                    200,
+                    json={
+                        "shoppingLists": [
+                            {
+                                "identifier": "l1",
+                                "name": "Test",
+                                "items": [
+                                    {
+                                        "identifier": "i1",
+                                        "name": "Milk",
+                                        "quantity": 0,
+                                        "unit": "gallon",
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                )
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+            lists = await client.get_lists()
+            assert lists[0].items[0].quantity == 0.0
+            assert lists[0].items[0].unit == Unit.GALLON
