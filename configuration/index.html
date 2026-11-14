@@ -704,6 +704,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#live-weekly-flyers-setup-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Live Weekly Flyers Setup (Optional)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#kroger-developer-api-setup-optional" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -814,6 +825,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#live-weekly-flyers-setup-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Live Weekly Flyers Setup (Optional)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#kroger-developer-api-setup-optional" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -907,6 +929,60 @@
 <td>Base URL for Kroger Developer API.</td>
 </tr>
 <tr>
+<td><code>ENABLE_LIVE_FLYERS</code></td>
+<td>Boolean</td>
+<td><code>false</code></td>
+<td>Fetch live weekly flyer sale items during pricing and optimization.</td>
+</tr>
+<tr>
+<td><code>ENABLE_FLIPP</code></td>
+<td>Boolean</td>
+<td><code>true</code></td>
+<td>Include generic nearby store flyers via Flipp when <code>ENABLE_LIVE_FLYERS=true</code>.</td>
+</tr>
+<tr>
+<td><code>ENABLE_OPEN_PRICES</code></td>
+<td>Boolean</td>
+<td><code>false</code></td>
+<td>Overlay crowdsourced retail receipt/shelf prices from Open Prices.</td>
+</tr>
+<tr>
+<td><code>OPEN_PRICES_BASE_URL</code></td>
+<td>String</td>
+<td><code>https://prices.openfoodfacts.org/api/v1</code></td>
+<td>Base URL for Open Food Facts Open Prices REST API.</td>
+</tr>
+<tr>
+<td><code>WHOLE_FOODS_STORE_ID</code></td>
+<td>String</td>
+<td><code>"10010"</code></td>
+<td>Whole Foods store ID for local weekly sales flyer (e.g. <code>10010</code> Cambridge).</td>
+</tr>
+<tr>
+<td><code>WHOLE_FOODS_PRIME</code></td>
+<td>Boolean</td>
+<td><code>true</code></td>
+<td>Prefer Amazon Prime member sale prices for Whole Foods deals.</td>
+</tr>
+<tr>
+<td><code>MARKET_BASKET_FLYER_URL</code></td>
+<td>String</td>
+<td><code>https://www.shopmarketbasket.com/wp-json/mb/v1/weekly-flyer</code></td>
+<td>JSON endpoint for Market Basket weekly flyer items.</td>
+</tr>
+<tr>
+<td><code>WHOLE_FOODS_BASE_URL</code></td>
+<td>String</td>
+<td><code>https://www.wholefoodsmarket.com</code></td>
+<td>Base URL for Whole Foods Market sales flyers.</td>
+</tr>
+<tr>
+<td><code>FLIPP_BASE_URL</code></td>
+<td>String</td>
+<td><code>https://backflipp.wishabi.com/flipp</code></td>
+<td>Base URL for Flipp circular discovery and item search.</td>
+</tr>
+<tr>
 <td><code>APP_TITLE</code></td>
 <td>String</td>
 <td><code>Grocery Helper</code></td>
@@ -921,14 +997,29 @@
 </tbody>
 </table>
 <hr />
+<h2 id="live-weekly-flyers-setup-optional">Live Weekly Flyers Setup (Optional)</h2>
+<p>Grocery Helper can fetch live weekly advertised sale prices from three sources without requiring API keys:</p>
+<ol>
+<li><strong>Market Basket</strong> (<code>shopmarketbasket.com/wp-json/mb/v1/weekly-flyer</code>): Automatically fetches active weekly circular deals across all Market Basket stores.</li>
+<li><strong>Whole Foods Market</strong> (<code>wholefoodsmarket.com/sales-flyer?store-id=...</code>): Fetches store-specific weekly promotions and Amazon Prime member pricing. Set <code>WHOLE_FOODS_STORE_ID</code> to your preferred store (for example: <code>10010</code> Cambridge, <code>10380</code> Medford, <code>10090</code> Bedford, <code>10156</code> Framingham, <code>10371</code> Andover).</li>
+<li><strong>Flipp</strong> (<code>backflipp.wishabi.com/flipp</code>): Automatically discovers nearby grocery store circulars for your <code>DEFAULT_STORE_ZIP</code> (such as ALDI, Star Market, Shaw's, Stop &amp; Shop, Hannaford, Wegmans, Big Y, Costco, Target, and Walmart).</li>
+</ol>
+<p>To enable live flyer overlays by default in both the CLI and Streamlit UI, add the following to <code>.env</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">DEFAULT_STORE_ZIP</span><span class="o">=</span><span class="s">02139</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="na">WHOLE_FOODS_STORE_ID</span><span class="o">=</span><span class="s">10010</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="na">WHOLE_FOODS_PRIME</span><span class="o">=</span><span class="s">true</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="na">ENABLE_LIVE_FLYERS</span><span class="o">=</span><span class="s">true</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="na">ENABLE_FLIPP</span><span class="o">=</span><span class="s">true</span>
+</code></pre></div>
+<hr />
 <h2 id="kroger-developer-api-setup-optional">Kroger Developer API Setup (Optional)</h2>
 <p>To enable live grocery prices from Kroger:
 1. Register for a free developer account at <a href="https://developer.kroger.com/">developer.kroger.com</a>.
 2. Create a new App in your Kroger developer dashboard.
 3. Copy your <strong>Client ID</strong> and <strong>Client Secret</strong>.
 4. Add them to your <code>.env</code> file:
-   <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">KROGER_CLIENT_ID</span><span class="o">=</span><span class="s">your_client_id_here</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="na">KROGER_CLIENT_SECRET</span><span class="o">=</span><span class="s">your_client_secret_here</span>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="na">KROGER_CLIENT_ID</span><span class="o">=</span><span class="s">your_client_id_here</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="na">KROGER_CLIENT_SECRET</span><span class="o">=</span><span class="s">your_client_secret_here</span>
 </code></pre></div>
 5. When running optimizations, live Kroger SKU prices will automatically overlay onto your results!</p>
 

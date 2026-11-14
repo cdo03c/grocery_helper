@@ -636,6 +636,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#browse-all-weekly-on-sale-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browse All Weekly On-Sale Items
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#step-3-choose-your-trip-style-max-stores-slider" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1069,6 +1080,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#browse-all-weekly-on-sale-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browse All Weekly On-Sale Items
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#step-3-choose-your-trip-style-max-stores-slider" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1266,9 +1288,9 @@
 <p>Grocery prices vary wildly between stores. Milk might be \$1.80 cheaper at ALDI, while fresh sourdough is cheaper at Trader Joe's, and your favorite coffee is on sale at Kroger.</p>
 <p><strong>Grocery Helper</strong>:
 1. Connects to your <strong>AnyList</strong> grocery list (on your phone or computer).
-2. Checks prices across nearby stores (<strong>ALDI</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>, and <strong>Whole Foods</strong>).
-3. Tells you the <strong>cheapest single store</strong> to visit if you're in a hurry.
-4. Tells you how much more you could save by splitting your trip between <strong>2 or more stores</strong>.
+2. Checks prices and live weekly sales flyers across nearby stores (<strong>ALDI</strong>, <strong>Market Basket</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>, <strong>Whole Foods</strong>, plus other local grocers in your ZIP code via <strong>Flipp</strong>).
+3. Shows which items on your list are <strong>currently on sale</strong> and lets you browse weekly circulars in one place.
+4. Tells you the <strong>cheapest single store</strong> to visit if you're in a hurry, or how much more you save by splitting your trip across <strong>2 or more stores</strong>.
 5. Automatically creates <strong>store-specific shopping lists back on your phone</strong> so you can easily check items off while shopping!</p>
 <pre class="mermaid"><code>flowchart LR
     A["📱 Your AnyList&lt;br/&gt;('Weekly Groceries')"] --&gt; B["🛒 Grocery Helper&lt;br/&gt;(Price Comparison Engine)"]
@@ -1307,7 +1329,12 @@ Your AnyList password is stored only on your computer in your local configuratio
 <p>Not everyone has every grocery store nearby. In the sidebar under <strong>"Allowed Stores"</strong>:
 - Check the stores you are willing to shop at (e.g., <strong>ALDI</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>).
 - Uncheck any stores that aren't near you or that you don't prefer.</p>
-<p>You can also enter your <strong>ZIP Code</strong> to automatically find the closest branch locations.</p>
+<p>You can also enter your <strong>ZIP Code</strong> to discover nearby store flyers (such as <strong>Star Market</strong>, <strong>Shaw's</strong>, <strong>Stop &amp; Shop</strong>, <strong>Hannaford</strong>, and <strong>Wegmans</strong>) and toggle <strong>Enable Live Weekly Flyers</strong> to overlay current weekly sales from <strong>Market Basket</strong>, <strong>Whole Foods</strong> (with optional <strong>Prime Pricing</strong>), and <strong>Flipp</strong> directly onto your comparisons.</p>
+<h3 id="browse-all-weekly-on-sale-items">Browse All Weekly On-Sale Items</h3>
+<p>Switch to the <strong>🏷️ Weekly Sales &amp; Flyers</strong> tab at any time to:
+- See which items on your current grocery list are on sale this week.
+- Search and filter full weekly circulars across Market Basket, Whole Foods, and nearby Flipp stores.
+- Check table rows or pick sale items from the dropdown to add weekly deals directly onto your active AnyList grocery list.</p>
 <hr />
 <h3 id="step-3-choose-your-trip-style-max-stores-slider">Step 3: Choose Your Trip Style ("Max Stores" Slider)</h3>
 <p>How much time do you have to shop this week? Use the <strong>"Max Store Stops"</strong> slider to set your preference:</p>
@@ -1383,8 +1410,9 @@ Your AnyList password is stored only on your computer in your local configuratio
 <p>You can still use Grocery Helper completely free in <strong>Demo Mode</strong>! It will give you realistic price comparisons, route optimizations, and savings estimates using built-in grocery lists.</p>
 <h3 id="how-does-grocery-helper-know-grocery-prices">How does Grocery Helper know grocery prices?</h3>
 <ul>
-<li><strong>Live Store APIs</strong>: For supported chains like Kroger (and its family of stores like Ralphs, Dillons, King Soopers, Fred Meyer), Grocery Helper connects directly to live product catalogs and weekly sale circulars.</li>
-<li><strong>Regional Price Models</strong>: For chains like ALDI and Trader Joe's, Grocery Helper uses calibrated regional grocery price benchmarks that reflect everyday retail pricing.</li>
+<li><strong>Live Weekly Sale Circulars</strong>: Grocery Helper can fetch live weekly advertised deals directly from <strong>Market Basket</strong>, <strong>Whole Foods Market</strong> (including Amazon Prime sale prices), and nearby grocery chains for your ZIP code via <strong>Flipp</strong> (note that circulars publish advertised sale items rather than full everyday catalogs).</li>
+<li><strong>Live Store APIs</strong>: For Kroger family stores (Ralphs, Dillons, King Soopers, Fred Meyer) when configured, Grocery Helper connects to Kroger's product catalog API.</li>
+<li><strong>Regional Price Models</strong>: For baseline everyday pricing and chains without public APIs (like Trader Joe's), Grocery Helper uses calibrated regional grocery price benchmarks.</li>
 </ul>
 <h3 id="what-if-a-store-doesnt-carry-an-item-on-my-list">What if a store doesn't carry an item on my list?</h3>
 <p>If an item isn't available at a specific store, Grocery Helper flags it and automatically assigns that item to another store on your route that does carry it.</p>

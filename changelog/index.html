@@ -745,6 +745,56 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#010-2026-11-14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.0] - 2026-11-14
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.0] - 2026-11-14">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improved
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#000-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -757,7 +807,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#added_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -890,6 +940,56 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#010-2026-11-14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.0] - 2026-11-14
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.0] - 2026-11-14">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improved
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#000-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -902,7 +1002,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#added_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1025,9 +1125,71 @@
 <p>The format is based on <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>,
 and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <hr />
+<h2 id="010-2026-11-14">[0.1.0] - 2026-11-14</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong>Live Weekly Flyers &amp; Generic Aggregator (<code>grocery_helper.flyers</code>)</strong>:</li>
+<li>Added <code>MarketBasketFlyerProvider</code> fetching weekly circular JSON from <code>shopmarketbasket.com/wp-json/mb/v1/weekly-flyer</code> with multi-buy, per-lb, and savings parsing.</li>
+<li>Added <code>WholeFoodsFlyerProvider</code> extracting store-specific weekly sales and Prime member pricing from <code>wholefoodsmarket.com/sales-flyer?store-id=&lt;id&gt;</code>.</li>
+<li>Added <code>FlippFlyerProvider</code> (<code>backflipp.wishabi.com/flipp</code>) for generic ZIP-code circular discovery and cross-store sale item search (e.g. ALDI, Star Market, Shaw's, Stop &amp; Shop, Hannaford, Wegmans, Big Y, Costco, Target, Walmart).</li>
+<li>Added <code>FlyerDeal</code> model and extended <code>StorePrice</code> with <code>is_live</code>, <code>matched_product_name</code>, and <code>deal_details</code>.</li>
+<li><strong>Open Prices Crowdsourced Retail Pricing (<code>grocery_helper.open_prices</code>)</strong>:</li>
+<li>Added <code>OpenPricesProvider</code> querying Open Food Facts' Open Prices REST API (<code>prices.openfoodfacts.org/api/v1</code>) with product-code search, category-tag staple fallback, ZIP proximity ranking, per-kilogram unit conversion, and cache isolation.</li>
+<li>Wired <code>enable_open_prices</code> (<code>Mock → Open Prices → Flipp → Kroger → Market Basket &amp; Whole Foods direct flyers</code> precedence) into <code>PricingService</code>, <code>.env</code> config (<code>ENABLE_OPEN_PRICES</code>, <code>OPEN_PRICES_BASE_URL</code>), Streamlit sidebar (<code>Include Open Prices (Crowdsourced)</code>), and CLI (<code>--open-prices</code> / <code>--no-open-prices</code>).</li>
+<li><strong>Single-Store Savings Comparison (<code>grocery_helper.models</code>, <code>grocery_helper.pricing</code>, <code>grocery_helper.app</code>, <code>grocery_helper.cli</code>)</strong>:</li>
+<li>Added <code>OptimizedCart.savings_vs_best_single_store</code> and <code>savings_pct_vs_best_single_store</code>, plus <code>build_stop_count_summary()</code> to compare total cost and savings for 1..N store stops against the generally cheapest single store in both Streamlit and the CLI.</li>
+<li><strong>Add Weekly On-Sale Items to List (<code>grocery_helper.app</code>)</strong>:</li>
+<li>Added <code>deal_to_grocery_item()</code> and interactive row-selection + multiselect controls in the <strong>🏷️ Weekly Sales &amp; Flyers</strong> tab so users can add any weekly on-sale item directly to their active AnyList grocery list with quantity, unit, category, store, price, and clean promotional notes.</li>
+<li><strong>Persistent UI Settings &amp; Default Store Configuration (<code>grocery_helper.preferences</code>, <code>grocery_helper.config</code>, <code>grocery_helper.app</code>)</strong>:</li>
+<li>Added <code>DEFAULT_ALLOWED_STORES</code>, <code>DEFAULT_MAX_STORES</code>, <code>ADVERTISED_ONLY</code>, and <code>UI_SETTINGS_FILE</code> configuration settings.</li>
+<li>Added <code>~/.config/grocery_helper/ui_settings.json</code> persistence to save non-secret sidebar selections (ZIP code, stores, max stops, flyer/Open Prices toggles, Whole Foods store ID, and selected list ID) across runs with a one-click <strong>Reset Saved Settings</strong> control.</li>
+<li><strong>AnyList Store Management &amp; List Sync (<code>grocery_helper.anylist_client</code>, <code>grocery_helper.app</code>)</strong>:</li>
+<li>Added <code>AnyListClient.ensure_store()</code> to look up or create store records (<code>new-store</code> via <code>/data/shopping-lists/update-v2</code>) and <code>AnyListClient.sync_cart_to_list()</code> to push optimized store, price, category, and quantity subfields back onto an existing list.</li>
+<li>Added the <strong>🔄 Update '<list>' in AnyList</strong> action alongside store sub-list export on the Optimised Cart tab.</li>
+<li><strong>Pricing, UI &amp; CLI Support (<code>grocery_helper.pricing</code>, <code>grocery_helper.app</code>, <code>grocery_helper.cli</code>)</strong>:</li>
+<li>Added <code>"Market Basket"</code> to <code>MockPricingProvider.STORE_PROFILES</code>.</li>
+<li>Updated <code>PricingService</code> to pre-warm and overlay Flipp, Market Basket, and Whole Foods live flyers (with <code>enable_live_flyers</code>, <code>enable_flipp</code>, <code>flyer_only_for_live_stores</code>, <code>whole_foods_store_id</code>, <code>whole_foods_prime</code>, and <code>flipp_merchants</code>).</li>
+<li>Added the <code>grocery-helper flyers</code> CLI subcommand and <code>--live-flyers</code>, <code>--advertised-only</code>, <code>--wf-store-id</code>, <code>--no-prime</code>, <code>--no-flipp</code>, and <code>--flipp-merchants</code> flags to <code>optimise</code>.</li>
+</ul>
+<h3 id="improved">Improved</h3>
+<ul>
+<li><strong>Unit-Aware Price Comparison (<code>grocery_helper.models</code>, <code>grocery_helper.pricing</code>)</strong>:</li>
+<li>Added <code>convert_unit_price()</code>, <code>PriceComparison.normalized_price()</code>, and <code>PriceComparison.has_unit_mismatch</code> to normalize comparable volume (<code>gallon</code> ↔ <code>liter</code>) and weight (<code>lb</code> ↔ <code>oz</code>) prices.</li>
+<li>Improved catalog matching for pack-suffixed items (e.g. <code>Soda 12pk</code>) and descriptive names via containment-weighted token scoring in <code>matcher.py</code>.</li>
+<li><strong>Streamlit Navigation (<code>grocery_helper.app</code>)</strong>:</li>
+<li>Ordered primary result tabs so <strong>🛒 Optimised Cart</strong> appears first, followed by <strong>📊 Price Comparison</strong> and <strong>🏷️ Weekly Sales &amp; Flyers</strong>.</li>
+<li><strong>Performance, Tooling &amp; CI/CD</strong>:</li>
+<li>Parallelized item price fetches via <code>asyncio.gather</code> and added shared <code>httpx.AsyncClient</code> connection pooling for <code>KrogerPricingProvider</code> during <code>PricingService.optimise()</code>.</li>
+<li>Cached live AnyList list fetches in Streamlit <code>session_state</code> with a manual refresh button and extracted pure view-model helpers (<code>build_comparison_rows</code>, <code>group_cart_by_store</code>).</li>
+<li>Consolidated duplicate <code>dev</code> dependency definitions in <code>pyproject.toml</code>, expanded <code>.github/workflows/ci.yml</code> to run formatting, lint, mypy, pytest coverage, and strict MkDocs builds across Python <code>3.11</code>/<code>3.12</code> on all pushes/PRs/manual triggers, and optimized <code>.github/workflows/docs.yml</code> with <code>concurrency</code> and <code>--no-install-project --only-group docs</code>.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Live AnyList Authentication &amp; Full Protobuf Subfield Sync (<code>grocery_helper.anylist_client</code>, <code>grocery_helper.models</code>, <code>grocery_helper.app</code>)</strong>:</li>
+<li>Replaced the legacy <code>/data/users/login</code> placeholder (which returned HTTP <code>403</code> and was misreported as an invalid password) with AnyList's real multipart <code>POST /auth/token</code> login and <code>/auth/token/refresh</code> token-renewal flow, plus multipart form uploads without <code>filename</code> so operations are processed properly.</li>
+<li>Added pure-Python Protocol Buffer serialization/deserialization for <code>POST /data/user-data/get</code> (<code>PBUserDataResponse</code>, including list stores and category groups) and multipart <code>operations</code> uploads (<code>PBListOperationList</code>).</li>
+<li>Extended <code>GroceryItem</code> (<code>store</code>, <code>price</code>, <code>price_details</code>) and protobuf encoding (<code>PBListItem</code>) to populate AnyList native <strong>category</strong> (<code>category</code>, <code>categoryMatchId</code>, and <code>PBListItemCategoryAssignment</code> with <code>normalize_category_name()</code>), <strong>quantity</strong> (<code>quantityPb.rawQuantity</code> + <code>deprecatedQuantity</code>), <strong>price</strong> (<code>PBItemPrice</code>), and <strong>store</strong> (<code>storeIds</code>), using <code>update-list-item</code> while preserving unmanaged fields and keeping promotional notes clean (<code>_clean_promo_note()</code>).</li>
+<li>Enriched exported items in <code>export_split_lists()</code> with assigned stores, normalized prices, and canonical categories.</li>
+<li>Unified network/auth error handling (<code>httpx.RequestError</code> and <code>401/403</code>) across <code>add_item</code>, <code>remove_item</code>, <code>update_item</code>, and <code>create_list</code>, preserved <code>0</code> item quantities and units on decode, and cleared <code>_http</code> on <code>__aexit__</code>.</li>
+<li><strong>Streamlit UI, Route Consistency &amp; Reload Safety (<code>grocery_helper.models</code>, <code>grocery_helper.app</code>, <code>grocery_helper.cli</code>)</strong>:</li>
+<li>Added <code>_ReloadSafeModel</code> coercion across core Pydantic models and JSON serialization for Streamlit <code>session_state</code> caches so hot module reloads never trigger <code>ValidationError</code> when filtering stores or recalculating baskets.</li>
+<li>Updated Streamlit <code>st.dataframe</code> / <code>st.bar_chart</code> calls from deprecated <code>use_container_width=True</code> to <code>width="stretch"</code>.</li>
+<li>Fixed <code>StreamlitAPIException</code> crash when selecting 0 or 1 allowed stores in the sidebar (<code>max_stores</code> slider bounds).</li>
+<li>Updated Shopping Route UI and CLI text table to render assigned stores and prices from <code>cart.store_assignments</code> instead of unconstrained <code>comp.cheapest</code>, using <code>Decimal</code> arithmetic for subtotals.</li>
+<li>Persisted demo-mode AnyList state and stable list-ID selection across Streamlit reruns so added items and exported sub-lists are retained.</li>
+<li>Replaced unsafe <code>run_async</code> fallback so coroutine <code>RuntimeError</code>s are not masked and active event loops are handled cleanly.</li>
+<li>Added unified error handling around item creation, list updates, and split-list exports.</li>
+<li><strong>Pricing Optimizer, Cache &amp; Matcher Safety (<code>grocery_helper.pricing</code>, <code>grocery_helper.utils</code>, <code>grocery_helper.matcher</code>)</strong>:</li>
+<li>Calculated <code>estimated_savings</code> relative to each item's assigned store price under <code>max_stores</code> constraints.</li>
+<li>Enforced <code>max_stores</code> even when items lack prices or subsets provide partial coverage; validated <code>max_stores &gt;= 1</code>.</li>
+<li>Isolated in-memory price cache keys by unit and provider configuration, added <code>threading.RLock</code> synchronization, and exposed <code>clear_price_cache()</code>.</li>
+<li>Guarded <code>KrogerPricingProvider</code> against missing tokens/locations and added token expiry tracking and 401 refresh retries.</li>
+<li>Fixed <code>truncate(..., max_len=0)</code> edge case and prevented punctuation-only strings or hyphenated prefixes (e.g. <code>L-Carnitine</code>) from false-matching in <code>matcher.py</code>.</li>
+</ul>
+<hr />
 <h2 id="000-2026-11-08">[0.0.0] - 2026-11-08</h2>
 <p>Initial release of <strong>Grocery Helper</strong> — a Python library, CLI, and Streamlit application that connects to AnyList, compares grocery prices across stores, and computes optimal shopping routes.</p>
-<h3 id="added">Added</h3>
+<h3 id="added_1">Added</h3>
 <h4 id="core-architecture">Core &amp; Architecture</h4>
 <ul>
 <li><strong>Data Models (<code>grocery_helper.models</code>)</strong>:</li>

@@ -653,10 +653,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-price-comparison-tab" class="md-nav__link">
+  <a href="#3-optimised-cart-tab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Price Comparison Tab
+        3. Optimised Cart Tab
       
     </span>
   </a>
@@ -664,10 +664,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-optimised-cart-tab" class="md-nav__link">
+  <a href="#4-price-comparison-tab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Optimised Cart Tab
+        4. Price Comparison Tab
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-weekly-sales-flyers-tab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 🏷️ Weekly Sales &amp; Flyers Tab
       
     </span>
   </a>
@@ -903,10 +914,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-price-comparison-tab" class="md-nav__link">
+  <a href="#3-optimised-cart-tab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Price Comparison Tab
+        3. Optimised Cart Tab
       
     </span>
   </a>
@@ -914,10 +925,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-optimised-cart-tab" class="md-nav__link">
+  <a href="#4-price-comparison-tab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Optimised Cart Tab
+        4. Price Comparison Tab
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-weekly-sales-flyers-tab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 🏷️ Weekly Sales &amp; Flyers Tab
       
     </span>
   </a>
@@ -960,32 +982,45 @@
 <h3 id="1-settings-sidebar">1. Settings &amp; Sidebar</h3>
 <ul>
 <li><strong>Credentials</strong>: Enter your AnyList email and password to sync your live account.</li>
-<li><strong>Store ZIP Code</strong>: Set your local ZIP code (e.g. <code>90210</code>) to look up nearby grocers.</li>
-<li><strong>Demo Mode Toggle</strong>: When enabled, the app uses built-in sample lists and mock pricing.</li>
-<li><strong>Store Filters (<code>Allowed Stores</code>)</strong>: Multiselect grocers to include or exclude (ALDI, Trader Joe's, Kroger, Whole Foods).</li>
+<li><strong>Store ZIP Code</strong>: Set your local ZIP code (e.g. <code>02139</code>) to discover nearby store circulars and grocers.</li>
+<li><strong>Demo Mode Toggle</strong>: When enabled, the app uses built-in sample lists and baseline pricing.</li>
+<li><strong>Store Filters (<code>Allowed Stores</code>)</strong>: Multiselect grocers to include or exclude (<strong>ALDI</strong>, <strong>Market Basket</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>, <strong>Whole Foods</strong>).</li>
 <li><strong>Max Stores Slider</strong>: Limit your route to at most $N$ stops (e.g. <code>max_stores=1</code> for single-trip shopping).</li>
+<li><strong>Weekly Flyers (MB, Whole Foods &amp; Flipp)</strong>:</li>
+<li><strong>Enable Live Weekly Flyers</strong>: Overlay live weekly sale prices from Market Basket, Whole Foods, and nearby Flipp stores onto comparisons.</li>
+<li><strong>Include Nearby Flipp Stores (by ZIP)</strong>: Discover and compare circulars across nearby grocers (e.g. Star Market, Shaw's, Stop &amp; Shop, Hannaford, Wegmans, Big Y, ALDI, Costco) by ZIP code.</li>
+<li><strong>Advertised flyer prices only (MB &amp; Whole Foods)</strong>: Omit baseline estimates for items not in the Market Basket or Whole Foods weekly flyers.</li>
+<li><strong>Whole Foods Store ID</strong>: Set your local Whole Foods store ID (e.g. <code>10010</code> Cambridge, <code>10380</code> Medford, <code>10156</code> Framingham).</li>
+<li><strong>Whole Foods Prime Pricing</strong>: Apply Amazon Prime member discounts when listed in the Whole Foods flyer.</li>
+<li><strong>Include Open Prices (Crowdsourced)</strong>: Overlay receipt- and shelf-tag-verified prices from Open Food Facts' Open Prices (<code>prices.openfoodfacts.org</code>) when items are not in weekly flyers.</li>
+<li><strong>Saved Preferences Between Runs</strong>: Non-secret sidebar choices (allowed stores, max stores, ZIP code, flyer/Open Prices toggles, Whole Foods store ID, and your last selected list) are automatically saved to <code>~/.config/grocery_helper/ui_settings.json</code> and restored on restart. Click <strong>Reset Saved Settings</strong> at the bottom of the sidebar to clear them back to <code>.env</code> defaults (credentials are never saved to this file). You can also set <code>DEFAULT_ALLOWED_STORES</code> (comma-separated store names) and <code>DEFAULT_MAX_STORES</code> directly in <code>.env</code>.</li>
 </ul>
 <h3 id="2-in-app-item-management">2. In-App Item Management</h3>
 <p>Above the results tabs, expand <strong>"➕ Add an Item to this List"</strong>:
 - Enter an item name (e.g. <em>"Greek Yogurt"</em> or <em>"Avocados"</em>).
 - Specify quantity and unit (each, lb, oz, gallon, pack, liter).
 - Click <strong>"Add to List"</strong> to immediately update the list and re-calculate optimal pricing!</p>
-<h3 id="3-price-comparison-tab">3. Price Comparison Tab</h3>
-<p>A comprehensive data table detailing:
-- Every grocery item on your list and its quantity.
-- Prices across all considered stores (highlighting promotional sales).
-- The identified cheapest store and best unit price.
-- Potential savings compared to the highest-priced store.</p>
-<h3 id="4-optimised-cart-tab">4. Optimised Cart Tab</h3>
+<h3 id="3-optimised-cart-tab">3. Optimised Cart Tab</h3>
 <ul>
 <li><strong>Metric Cards</strong>:</li>
 <li><strong>Optimised Basket Total</strong>: Total cost when buying each item at its cheapest store.</li>
 <li><strong>Estimated Total Savings</strong>: Dollar amount saved across the basket.</li>
 <li><strong>Best Single Store</strong>: The cheapest single store if you only make one stop, along with the cost delta.</li>
-<li><strong>Cost Comparison Bar Chart</strong>: Visual comparison of the optimized split vs. shopping exclusively at ALDI, Kroger, Trader Joe's, or Whole Foods.</li>
+<li><strong>Cost Comparison Bar Chart</strong>: Visual comparison of the optimized split vs. shopping exclusively at a single store.</li>
 <li><strong>Store Route Expanders</strong>: Itemized shopping lists grouped by store with subtotals.</li>
-<li><strong>Export Store Lists to AnyList</strong>: A one-click button that creates store-specific sub-lists (e.g. <em>"Weekly Shop (ALDI)"</em>) directly in your AnyList account.</li>
+<li><strong>Update List or Export Store Sub-Lists to AnyList</strong>: Use <strong>🔄 Update '<list>' in AnyList</strong> to push assigned stores, prices, categories, and quantities directly onto items in your active list, or <strong>📤 Export Store Lists to AnyList</strong> to create store-specific sub-lists (e.g. <em>"Weekly Shop (ALDI)"</em>).</li>
 </ul>
+<h3 id="4-price-comparison-tab">4. Price Comparison Tab</h3>
+<p>A comprehensive data table detailing:
+- Every grocery item on your list and its quantity.
+- Prices across all considered stores (highlighting promotional sales and live weekly flyer deals with <code>🏷️</code>).
+- The identified cheapest store and best unit price.
+- Potential savings compared to the highest-priced store.</p>
+<h3 id="5-weekly-sales-flyers-tab">5. 🏷️ Weekly Sales &amp; Flyers Tab</h3>
+<p>Browse and search active weekly sale items directly in the app:
+- Click <strong>"🔄 Load / Refresh Live Weekly Flyers"</strong> (or enable <strong>Live Weekly Flyers</strong> in the sidebar) to fetch circulars from <strong>Market Basket</strong>, <strong>Whole Foods</strong>, and nearby <strong>Flipp</strong> stores.
+- <strong>🎯 On-Sale Matches for Your Current List</strong>: Automatically highlights items from your active grocery list that are currently on sale, showing matched flyer titles, sale prices, regular prices, and deal terms.
+- <strong>📋 Browse All Weekly On-Sale Items</strong>: Filter active weekly deals by store, search by keyword, toggle <strong>Featured Only</strong>, check rows directly in the table or select deals in the <strong>Or pick weekly sale item(s) to add</strong> picker, and add them straight onto your active AnyList shopping list.</p>
 
 
 

@@ -711,6 +711,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#grocery_helperflyers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grocery_helper.flyers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#grocery_helperopen_prices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grocery_helper.open_prices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#grocery_helperpricing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -898,6 +920,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#grocery_helperflyers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grocery_helper.flyers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#grocery_helperopen_prices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grocery_helper.open_prices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#grocery_helperpricing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -961,9 +1005,10 @@
         CACHE[("In-Memory TTL Cache&lt;br/&gt;utils.py")]
     end
 
-    subgraph Providers["3. Store Pricing Providers"]
+    subgraph Providers["3. Store Pricing &amp; Flyer Providers"]
+        FP["Weekly Flyer Providers&lt;br/&gt;(Market Basket, Whole Foods, Flipp)"]
         KP["KrogerPricingProvider&lt;br/&gt;(OAuth2 Live Store API)"]
-        MP["MockPricingProvider&lt;br/&gt;(ALDI, TJ's, Kroger, Whole Foods)"]
+        MP["MockPricingProvider&lt;br/&gt;(ALDI, MB, TJ's, Kroger, WF)"]
     end
 
     subgraph Optim["4. Basket Optimization"]
@@ -981,8 +1026,10 @@
     AC --&gt; PS
     NM --&gt; PS
     PS &lt;--&gt; CACHE
+    PS --&gt; FP
     PS --&gt; KP
     PS --&gt; MP
+    FP --&gt; OPT
     KP --&gt; OPT
     MP --&gt; OPT
     OPT --&gt; ST
@@ -995,24 +1042,37 @@
 <p>Defines the core domain entities:
 - <code>GroceryItem</code>: Product identifier, display name, quantity, measurement unit, category, and checked status.
 - <code>GroceryList</code>: List container with creation and modification timestamps.
-- <code>StorePrice</code>: Pricing data per store including regular and promotional sale price.
-- <code>PriceComparison</code>: Cross-store price matrix for a single item.
+- <code>StorePrice</code>: Pricing data per store including regular and promotional sale price, plus optional <code>is_live</code>, <code>matched_product_name</code>, and <code>deal_details</code> metadata for live flyer overlays.
+- <code>FlyerDeal</code>: Advertised weekly flyer item (<code>store_name</code>, <code>product_name</code>, <code>regular_price</code>, <code>sale_price</code>, <code>prime_price</code>, <code>unit</code>, <code>deal_text</code>, <code>valid_from</code>, <code>valid_to</code>, and <code>effective_sale_price()</code>).
+- <code>PriceComparison</code>: Cross-store price matrix for a single item, with unit normalization (<code>normalized_price()</code>).
 - <code>OptimizedCart</code>: The output of basket optimization, including item-to-store mappings, total basket cost, potential savings, and single-store comparison totals.</p>
 <h3 id="grocery_helperanylist_client"><code>grocery_helper.anylist_client</code></h3>
-<p>Async HTTP client designed around AnyList's reverse-engineered <code>/data/</code> endpoints:
+<p>Async HTTP client built around AnyList's <code>/auth/token</code> and protobuf <code>/data/</code> API:
 - Generates required <code>X-AnyLeaf-API-Version: 3</code> and device UUID <code>X-AnyLeaf-Client-Identifier</code> headers.
-- Handles user authentication, session token retention, and shopping list CRUD.
+- Handles multipart <code>/auth/token</code> authentication, JWT <code>sub</code> user-ID extraction, automatic <code>/auth/token/refresh</code> retries, protobuf <code>/data/user-data/get</code> decoding, and multipart <code>operations</code> uploads to <code>/data/shopping-lists/update</code>.
 - Seamless fallback to <code>demo_mode</code> with sample lists (<em>"Weekly Shop"</em>, <em>"Party Supplies"</em>, <em>"Brunch &amp; Coffee"</em>).
 - <code>export_split_lists()</code> generates store-specific sub-lists back in AnyList.</p>
+<h3 id="grocery_helperflyers"><code>grocery_helper.flyers</code></h3>
+<ul>
+<li><strong><code>BaseFlyerProvider</code></strong>: Protocol defining <code>fetch_flyer()</code> and <code>get_prices(item, store_zip)</code>.</li>
+<li><strong><code>MarketBasketFlyerProvider</code></strong>: Fetches active Market Basket weekly circulars from <code>/wp-json/mb/v1/weekly-flyer</code> and computes sale/regular prices and savings.</li>
+<li><strong><code>WholeFoodsFlyerProvider</code></strong>: Extracts store-specific promotions from Whole Foods Market <code>__NEXT_DATA__</code> SSR HTML (<code>sales-flyer?store-id=...</code>) with support for Amazon Prime pricing and percentage-off promotions.</li>
+<li><strong><code>FlippFlyerProvider</code></strong>: Queries Flipp (<code>backflipp.wishabi.com/flipp</code>) by ZIP code to discover local grocery circulars and search advertised items across chains.</li>
+<li><strong><code>match_flyer_deals()</code></strong>: Token-similarity matcher linking grocery list entries to active circular titles while avoiding substring false positives (e.g., <code>"milk"</code> vs. <code>"buttermilk"</code>).</li>
+</ul>
+<h3 id="grocery_helperopen_prices"><code>grocery_helper.open_prices</code></h3>
+<ul>
+<li><strong><code>OpenPricesProvider</code></strong>: Queries Open Food Facts' Open Prices REST API (<code>/products</code> + <code>/prices</code>) for receipt- and shelf-tag-verified US retail prices, normalizing store names (<code>Whole Foods Market</code>, <code>Market Basket</code>, <code>Trader Joe's</code>, <code>ALDI</code>, etc.), converting <code>KILOGRAM</code> prices to <code>Unit.LB</code>, and prioritizing local ZIP matches.</li>
+</ul>
 <h3 id="grocery_helperpricing"><code>grocery_helper.pricing</code></h3>
 <ul>
 <li><strong><code>BasePricingProvider</code></strong>: Protocol specifying <code>async def get_prices(item, store_zip) -&gt; list[StorePrice]</code>.</li>
-<li><strong><code>MockPricingProvider</code></strong>: Generates deterministic prices with store price profiles (ALDI, Trader Joe's, Kroger, Whole Foods) based on catalog matching or name hashes.</li>
+<li><strong><code>MockPricingProvider</code></strong>: Generates deterministic baseline prices with store profiles (<strong>ALDI</strong>, <strong>Market Basket</strong>, <strong>Trader Joe's</strong>, <strong>Kroger</strong>, <strong>Whole Foods</strong>).</li>
 <li><strong><code>KrogerPricingProvider</code></strong>: Authenticates with Kroger Developer OAuth2, resolves nearest store location by ZIP code, and retrieves live SKU prices.</li>
 <li><strong><code>PricingService</code></strong>:</li>
-<li>In-memory TTL caching with cache keys formatted as <code>cache_key(item.name, zip)</code>.</li>
-<li>Overlays live Kroger prices onto regional store matrices.</li>
-<li>Computes unconstrained split basket and evaluates <code>max_stores</code> combinations using subset cover analysis.</li>
+<li>Thread-safe TTL caching keyed by provider, flyer settings, Open Prices setting, item name, unit, and ZIP code.</li>
+<li>Pre-warms and overlays live data with clear precedence: <strong>Mock</strong> → <strong>Open Prices</strong> (crowdsourced shelf prices) → <strong>Flipp</strong> (generic local chains) → <strong>Kroger API</strong> → store-specific <strong>Market Basket</strong> &amp; <strong>Whole Foods</strong> circulars (plus optional <code>flyer_only_for_live_stores=True</code> mode).</li>
+<li>Computes unconstrained split baskets and evaluates <code>max_stores</code> combinations using subset cover analysis.</li>
 </ul>
 <h3 id="grocery_helpermatcher"><code>grocery_helper.matcher</code></h3>
 <p>Normalizes AnyList user inputs:

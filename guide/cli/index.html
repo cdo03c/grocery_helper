@@ -725,6 +725,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#grocery-helper-flyers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grocery-helper flyers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="grocery-helper flyers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#options_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cli-examples" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -763,6 +791,28 @@
     <span class="md-ellipsis">
       
         Compare Only ALDI and Trader Joe's
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#optimize-with-live-weekly-flyers-market-basket-whole-foods-flipp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimize with Live Weekly Flyers (Market Basket, Whole Foods &amp; Flipp)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list-all-weekly-on-sale-items-match-your-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        List All Weekly On-Sale Items &amp; Match Your List
       
     </span>
   </a>
@@ -1025,6 +1075,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#grocery-helper-flyers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grocery-helper flyers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="grocery-helper flyers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#options_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cli-examples" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1063,6 +1141,28 @@
     <span class="md-ellipsis">
       
         Compare Only ALDI and Trader Joe's
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#optimize-with-live-weekly-flyers-market-basket-whole-foods-flipp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimize with Live Weekly Flyers (Market Basket, Whole Foods &amp; Flipp)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list-all-weekly-on-sale-items-match-your-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        List All Weekly On-Sale Items &amp; Match Your List
       
     </span>
   </a>
@@ -1109,7 +1209,7 @@
 <p>The <code>grocery-helper</code> CLI allows automated, headless execution for shell scripts, scheduled tasks, and CI/CD pipelines.</p>
 <hr />
 <h2 id="subcommands-overview">Subcommands Overview</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>grocery-helper<span class="w"> </span><span class="o">[</span>-h<span class="o">]</span><span class="w"> </span><span class="o">{</span>serve,optimise<span class="o">}</span><span class="w"> </span>...
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>grocery-helper<span class="w"> </span><span class="o">[</span>-h<span class="o">]</span><span class="w"> </span><span class="o">{</span>serve,optimise,flyers<span class="o">}</span><span class="w"> </span>...
 </code></pre></div>
 <hr />
 <h2 id="grocery-helper-serve"><code>grocery-helper serve</code></h2>
@@ -1139,40 +1239,74 @@
 <li><code>--zip ZIP</code>: Specify store ZIP code for local pricing (default: from <code>.env</code> or <code>90210</code>).</li>
 <li><code>--max-stores N</code>: Limit the shopping route to at most $N$ stores (e.g. <code>1</code> or <code>2</code>).</li>
 <li><code>--stores [STORES ...]</code>: Space-separated list of store names to consider.</li>
+<li><code>--live-flyers</code>: Overlay live weekly advertised sale prices from Market Basket, Whole Foods, and Flipp.</li>
+<li><code>--advertised-only</code>: For Market Basket and Whole Foods, use only advertised weekly flyer items instead of baseline estimates.</li>
+<li><code>--wf-store-id ID</code>: Whole Foods store ID for weekly sales flyer lookup (default: <code>10010</code>).</li>
+<li><code>--no-prime</code>: Use regular Whole Foods sale prices instead of Prime member prices.</li>
+<li><code>--no-flipp</code>: Disable generic nearby store circular lookups via Flipp when <code>--live-flyers</code> is set.</li>
+<li><code>--flipp-merchants [STORES ...]</code>: Restrict Flipp lookup to specific store names (e.g. <code>Hannaford "Star Market" ALDI</code>).</li>
+<li><code>--open-prices</code> / <code>--no-open-prices</code>: Enable or disable crowdsourced Open Prices shelf-price lookups (<code>prices.openfoodfacts.org</code>).</li>
 <li><code>--json</code>: Output raw JSON data instead of formatted terminal text.</li>
+</ul>
+<hr />
+<h2 id="grocery-helper-flyers"><code>grocery-helper flyers</code></h2>
+<p>List active weekly advertised on-sale items from Market Basket, Whole Foods, and nearby stores via Flipp.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>grocery-helper<span class="w"> </span>flyers<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</code></pre></div>
+<h3 id="options_2">Options:</h3>
+<ul>
+<li><code>--store {all,mb,wf,flipp}</code>: Flyer source(s) to fetch (<code>all</code> by default; <code>mb</code> Market Basket; <code>wf</code> Whole Foods; <code>flipp</code> all nearby stores by ZIP).</li>
+<li><code>--zip ZIP</code>: ZIP/postal code for Flipp circular discovery (default: from <code>.env</code> or <code>02139</code>).</li>
+<li><code>--merchants [STORES ...]</code>: Optional Flipp merchant allow-list (e.g. <code>"Star Market" Hannaford ALDI</code>).</li>
+<li><code>--wf-store-id ID</code>: Whole Foods store ID (default: <code>10010</code>).</li>
+<li><code>--no-prime</code>: Show regular Whole Foods sale prices instead of Prime member prices.</li>
+<li><code>--search KEYWORD</code>: Filter on-sale items by keyword (product name, brand, description, or department).</li>
+<li><code>--list-id LIST_ID</code>: Highlight weekly flyer deals matching items on an AnyList shopping list.</li>
+<li><code>--demo</code>: Load <code>--list-id</code> from built-in sample lists.</li>
+<li><code>--json</code>: Output raw JSON instead of a formatted table.</li>
 </ul>
 <hr />
 <h2 id="cli-examples">CLI Examples</h2>
 <h3 id="basic-optimization-in-demo-mode">Basic Optimization in Demo Mode</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo
 </code></pre></div>
 <h3 id="restrict-to-at-most-2-stores">Restrict to at most 2 Stores</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--max-stores<span class="w"> </span><span class="m">2</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--max-stores<span class="w"> </span><span class="m">2</span>
 </code></pre></div>
 <h3 id="compare-only-aldi-and-trader-joes">Compare Only ALDI and Trader Joe's</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--stores<span class="w"> </span>ALDI<span class="w"> </span><span class="s2">&quot;Trader Joe&#39;s&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--stores<span class="w"> </span>ALDI<span class="w"> </span><span class="s2">&quot;Trader Joe&#39;s&quot;</span>
+</code></pre></div>
+<h3 id="optimize-with-live-weekly-flyers-market-basket-whole-foods-flipp">Optimize with Live Weekly Flyers (Market Basket, Whole Foods &amp; Flipp)</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--live-flyers<span class="w"> </span>--zip<span class="w"> </span><span class="m">02139</span><span class="w"> </span>--wf-store-id<span class="w"> </span><span class="m">10010</span>
+</code></pre></div>
+<h3 id="list-all-weekly-on-sale-items-match-your-list">List All Weekly On-Sale Items &amp; Match Your List</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Market Basket + Whole Foods + nearby Flipp stores matched against demo list_001</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>grocery-helper<span class="w"> </span>flyers<span class="w"> </span>--demo<span class="w"> </span>--list-id<span class="w"> </span>list_001<span class="w"> </span>--zip<span class="w"> </span><span class="m">02139</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Search Flipp deals at specific local chains</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>grocery-helper<span class="w"> </span>flyers<span class="w"> </span>--store<span class="w"> </span>flipp<span class="w"> </span>--zip<span class="w"> </span><span class="m">02139</span><span class="w"> </span>--merchants<span class="w"> </span>Hannaford<span class="w"> </span><span class="s2">&quot;Star Market&quot;</span><span class="w"> </span>ALDI<span class="w"> </span>--search<span class="w"> </span>chicken
 </code></pre></div>
 <h3 id="output-json-for-automation-scripts">Output JSON for Automation Scripts</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>grocery-helper<span class="w"> </span>optimise<span class="w"> </span>list_001<span class="w"> </span>--demo<span class="w"> </span>--json
 </code></pre></div>
 <p>Sample JSON structure:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">&quot;list_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;list_001&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">&quot;list_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Weekly Shop&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">&quot;store_assignments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="nt">&quot;item_001&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ALDI&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="nt">&quot;item_002&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ALDI&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="nt">&quot;item_005&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Kroger&quot;</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="p">},</span>
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="nt">&quot;total_cost&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;23.140&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">  </span><span class="nt">&quot;estimated_savings&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;8.740&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">  </span><span class="nt">&quot;single_store_totals&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">    </span><span class="nt">&quot;ALDI&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;23.440&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="nt">&quot;Kroger&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;26.370&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">    </span><span class="nt">&quot;Trader Joe&#39;s&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;26.680&quot;</span><span class="p">,</span>
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">    </span><span class="nt">&quot;Whole Foods&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;31.880&quot;</span>
-<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">&quot;list_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;list_001&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="nt">&quot;list_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Weekly Shop&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">&quot;store_assignments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="nt">&quot;item_001&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ALDI&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">&quot;item_002&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ALDI&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nt">&quot;item_005&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Kroger&quot;</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">  </span><span class="nt">&quot;total_cost&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;23.140&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">  </span><span class="nt">&quot;estimated_savings&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;8.740&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">  </span><span class="nt">&quot;single_store_totals&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">    </span><span class="nt">&quot;ALDI&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;23.440&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">    </span><span class="nt">&quot;Kroger&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;26.370&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">    </span><span class="nt">&quot;Trader Joe&#39;s&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;26.680&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">    </span><span class="nt">&quot;Whole Foods&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;31.880&quot;</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="p">}</span>
 </code></pre></div></p>
 
 
