@@ -300,8 +300,25 @@ class TestFlyerHelpers:
         assert converted.quantity == 2.0
         assert converted.unit == Unit.LB
         assert converted.category == "Seafood"
-        assert converted.notes is not None
-        assert "Market Basket" in converted.notes
+        assert converted.store == "Market Basket"
+        assert converted.price == Decimal("7.99")
+        assert converted.price_details == "/lb"
+        assert converted.notes is None
+
+        promo_deal = FlyerDeal(
+            store_name="Market Basket",
+            product_name="Chobani Greek Yogurt 4 Pack",
+            sale_price=Decimal("2.99"),
+            unit=Unit.PACK,
+            department="Dairy & Frozen Foods",
+            deal_text="Save up to $2.50",
+        )
+        promo_item = deal_to_grocery_item(promo_deal, quantity=1.0)
+        assert promo_item.category == "Dairy"
+        assert promo_item.store == "Market Basket"
+        assert promo_item.price == Decimal("2.99")
+        assert promo_item.price_details == "/pack"
+        assert promo_item.notes == "Save up to $2.50"
 
         at.session_state["loaded_flyers_payload"] = {
             "cache_sig": ("10010", "", True),
@@ -330,6 +347,12 @@ class TestFlyerHelpers:
         ]
         assert comp_dfs
         assert "Wild Caught Salmon Fillet" in comp_dfs[-1]["Item"].tolist()
+
+        sync_btns = [b for b in at.button if b.key == "sync_cart_to_anylist_btn"]
+        assert sync_btns
+        sync_btns[-1].click().run()
+        assert not at.exception
+        assert any("Updated" in s.value and "store, price, category" in s.value for s in at.success)
 
     def test_settings_persist_between_runs_and_reset(
         self,

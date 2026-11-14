@@ -21,7 +21,12 @@ import pandas as pd
 import streamlit as st
 
 from grocery_helper import __version__
-from grocery_helper.anylist_client import AnyListAPIError, AnyListAuthError, AnyListClient
+from grocery_helper.anylist_client import (
+    AnyListAPIError,
+    AnyListAuthError,
+    AnyListClient,
+    normalize_category_name,
+)
 from grocery_helper.config import settings
 from grocery_helper.flyers import (
     WHOLE_FOODS_STORES,
@@ -824,28 +829,76 @@ def render_optimised_cart(
 
     if config is not None and cart.store_assignments:
         st.divider()
-        if st.button(
-            "📤 Export Store Lists to AnyList",
-            help="Create store-specific lists in AnyList with the assigned items.",
-        ):
-            client = _get_anylist_client(config)
+        col_sync, col_export = st.columns(2)
+        with col_sync:
+            if st.button(
+                f"🔄 Update '{grocery_list.name}' in AnyList",
+                key="sync_cart_to_anylist_btn",
+                help=(
+                    "Update items on this AnyList list with assigned stores, prices, "
+                    "categories, and quantities."
+                ),
+            ):
+                client = _get_anylist_client(config)
 
-            async def _export() -> list[GroceryList]:
-                async with client:
-                    await client.authenticate()
-                    return await client.export_split_lists(cart, base_name=grocery_list.name)
+                async def _sync() -> list[GroceryItem]:
+                    async with client:
+                        await client.authenticate()
+                        return await client.sync_cart_to_list(cart, grocery_list)
 
-            try:
-                with st.spinner("Creating store lists in AnyList..."):
-                    created = run_async(_export())
-            except (AnyListAuthError, AnyListAPIError) as err:
-                st.error(f"Failed to export lists to AnyList: {err}")
-            else:
-                if not config["demo_mode"]:
-                    _invalidate_live_lists_cache()
-                st.success(f"Created {len(created)} store-specific list(s) in AnyList:")
-                for cl in created:
-                    st.write(f"- 📋 **{cl.name}** ({len(cl.items)} items)")
+                try:
+                    with st.spinner("Updating items in AnyList..."):
+                        updated = run_async(_sync())
+                except (AnyListAuthError, AnyListAPIError) as err:
+                    st.error(f"Failed to update list in AnyList: {err}")
+                else:
+                    if not config["demo_mode"]:
+                        _invalidate_live_lists_cache()
+                    st.success(
+                        f"Updated {len(updated)} item(s) on **{grocery_list.name}** "
+                        "with store, price, category, and quantity."
+                    )
+        with col_export:
+            if st.button(
+                "📤 Export Store Lists to AnyList",
+                help="Create store-specific lists in AnyList with the assigned items.",
+            ):
+                client = _get_anylist_client(config)
+
+                async def _export() -> list[GroceryList]:
+                    async with client:
+                        await client.authenticate()
+                        return await client.export_split_lists(cart, base_name=grocery_list.name)
+
+                try:
+                    with st.spinner("Creating store lists in AnyList..."):
+                        created = run_async(_export())
+                except (AnyListAuthError, AnyListAPIError) as err:
+                    st.error(f"Failed to export lists to AnyList: {err}")
+                else:
+                    if not config["demo_mode"]:
+                        _invalidate_live_lists_cache()
+                    st.success(f"Created {len(created)} store-specific list(s) in AnyList:")
+                    for cl in created:
+                        st.write(f"- 📋 **{cl.name}** ({len(cl.items)} items)")
+
+
+def _clean_promo_note(deal: FlyerDeal, eff_price: Decimal | None) -> str | None:
+    """Return optional promotional notes not already captured by store, price, or category."""
+    raw = (deal.deal_text or "").strip()
+    if not raw:
+        return None
+    if eff_price is not None:
+        compact_raw = raw.replace(" ", "").lower()
+        price_str = f"${eff_price:.2f}"
+        candidates = {
+            price_str,
+            f"{price_str}/{deal.unit.value}".lower(),
+            f"{price_str}{deal.unit.value}".lower(),
+        }
+        if compact_raw in candidates:
+            return None
+    return raw
 
 
 def deal_to_grocery_item(
@@ -853,21 +906,20 @@ def deal_to_grocery_item(
     quantity: float = 1.0,
     use_prime: bool = True,
 ) -> GroceryItem:
-    """Convert a FlyerDeal into a GroceryItem ready to append to an AnyList list."""
+    """Convert a FlyerDeal into a GroceryItem with store, price, category, and quantity."""
     eff = deal.effective_sale_price(use_prime=use_prime)
-    price_text = _format_deal_price(eff, deal.unit)
-    note_parts = [f"{deal.store_name} weekly sale"]
-    if price_text != "-":
-        note_parts.append(price_text)
-    if deal.deal_text and deal.deal_text != price_text:
-        note_parts.append(deal.deal_text)
+    product_name = deal.product_name.strip()
+    price_details = f"/{deal.unit.value}" if eff is not None and deal.unit != Unit.EACH else None
     return GroceryItem(
         id=uuid.uuid4().hex,
-        name=deal.product_name.strip(),
+        name=product_name,
         quantity=max(0.5, float(quantity)),
         unit=deal.unit,
-        category=deal.department,
-        notes=" · ".join(note_parts),
+        category=normalize_category_name(deal.department, product_name),
+        notes=_clean_promo_note(deal, eff),
+        price=eff,
+        price_details=price_details,
+        store=deal.store_name,
     )
 
 
@@ -1153,11 +1205,13 @@ def main() -> None:
                     )
                 submitted = st.form_submit_button("Add to List")
                 if submitted and new_name.strip():
+                    clean_name = new_name.strip()
                     new_item = GroceryItem(
                         id=uuid.uuid4().hex,
-                        name=new_name.strip(),
+                        name=clean_name,
                         quantity=float(new_qty),
                         unit=Unit(new_unit),
+                        category=normalize_category_name(None, clean_name),
                     )
                     _add_items_to_selected_list(selected_list, [new_item], config)
 

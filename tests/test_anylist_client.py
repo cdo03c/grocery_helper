@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -12,11 +13,14 @@ from grocery_helper.anylist_client import (
     AnyListAPIError,
     AnyListAuthError,
     AnyListClient,
+    _decode_user_data_lists_with_meta,
     _encode_field_bytes,
     _encode_field_str,
     _encode_field_varint,
+    _iter_proto_fields,
+    normalize_category_name,
 )
-from grocery_helper.models import GroceryItem, Unit
+from grocery_helper.models import GroceryItem, OptimizedCart, PriceComparison, StorePrice, Unit
 
 
 def _make_jwt(sub: str = "user_abc") -> str:
@@ -501,7 +505,7 @@ class TestHTTPOperations:
             assert new_list.name == "Party Supplies"
             assert len(uploaded_bodies) == 4
             assert b"add-shopping-list-item" in uploaded_bodies[0]
-            assert b"set-list-item-name" in uploaded_bodies[1]
+            assert b"update-list-item" in uploaded_bodies[1]
             assert b"remove-shopping-list-item" in uploaded_bodies[2]
             assert b"new-shopping-list" in uploaded_bodies[3]
             for body in uploaded_bodies:
@@ -584,3 +588,290 @@ class TestHTTPOperations:
             lists = await client.get_lists()
             assert lists[0].items[0].quantity == 0.0
             assert lists[0].items[0].unit == Unit.GALLON
+
+
+def _extract_multipart_part(body: bytes) -> bytes:
+    """Extract the binary ``operations`` part from an HTTP multipart/form-data payload."""
+    marker = b"\r\n\r\n"
+    start = body.index(marker) + len(marker)
+    end = body.rfind(b"\r\n--")
+    return body[start:end]
+
+
+def _build_pb_user_data_with_meta(
+    list_id: str,
+    list_name: str,
+    *,
+    stores: list[tuple[str, str]] | None = None,
+    categories: list[tuple[str, str, str]] | None = None,
+    group_id: str = "cg_default",
+    extra_item_bytes: list[bytes] | None = None,
+) -> bytes:
+    """Build a ``PBUserDataResponse`` including ``PBListResponse`` stores & category groups."""
+    encoded_items = b"".join(_encode_field_bytes(4, ib) for ib in (extra_item_bytes or []))
+    shopping_list_pb = (
+        _encode_field_str(1, list_id) + _encode_field_str(3, list_name) + encoded_items
+    )
+
+    cat_group_pb = _encode_field_str(1, group_id) + _encode_field_str(3, list_id)
+    for cid, cname, sys_cat in categories or []:
+        cat_pb = (
+            _encode_field_str(1, cid)
+            + _encode_field_str(3, group_id)
+            + _encode_field_str(4, list_id)
+            + _encode_field_str(5, cname)
+            + _encode_field_str(7, sys_cat)
+        )
+        cat_group_pb += _encode_field_bytes(5, cat_pb)
+
+    list_resp_pb = _encode_field_str(1, list_id)
+    if categories:
+        cat_resp_pb = _encode_field_bytes(1, cat_group_pb)
+        list_resp_pb += _encode_field_bytes(7, cat_resp_pb)
+    for sid, sname in stores or []:
+        store_pb = (
+            _encode_field_str(1, sid) + _encode_field_str(3, list_id) + _encode_field_str(4, sname)
+        )
+        list_resp_pb += _encode_field_bytes(9, store_pb)
+
+    lists_resp_pb = _encode_field_bytes(1, shopping_list_pb) + _encode_field_bytes(6, list_resp_pb)
+    return _encode_field_bytes(1, lists_resp_pb)
+
+
+def _decode_first_list_item_fields(ops_pb: bytes) -> tuple[str, dict[int, list[int | bytes]]]:
+    """Extract ``(handler_id, item_fields)`` from the first ``PBListOperation``."""
+    handler_id = ""
+    item_bytes = b""
+    for fn, wt, val in _iter_proto_fields(ops_pb):
+        if fn == 1 and wt == 2 and isinstance(val, bytes):
+            for opf, opw, opv in _iter_proto_fields(val):
+                if opf == 1 and opw == 2 and isinstance(opv, bytes):
+                    for mf, mw, mv in _iter_proto_fields(opv):
+                        if mf == 2 and mw == 2 and isinstance(mv, bytes):
+                            handler_id = mv.decode("utf-8", errors="replace")
+                elif opf == 6 and opw == 2 and isinstance(opv, bytes):
+                    item_bytes = opv
+            break
+    fields: dict[int, list[int | bytes]] = {}
+    for ifn, _, ival in _iter_proto_fields(item_bytes):
+        fields.setdefault(ifn, []).append(ival)
+    return handler_id, fields
+
+
+class TestItemSubfields:
+    def test_normalize_category_name_disambiguates_departments(self) -> None:
+        assert normalize_category_name("Dairy & Frozen Foods", "Chobani Greek Yogurt") == "Dairy"
+        assert (
+            normalize_category_name("Dairy & Frozen Foods", "Ben & Jerry's Ice Cream")
+            == "Frozen Foods"
+        )
+        assert normalize_category_name("Meat & Seafood", "Chicken Breast") == "Meat"
+        assert normalize_category_name("Meat & Seafood", "Wild Caught Salmon") == "Seafood"
+        assert normalize_category_name(None, "Hass Avocados") == "Produce"
+
+    @pytest.mark.asyncio
+    async def test_add_item_encodes_category_quantity_store_and_price_and_decodes_roundtrip(
+        self,
+    ) -> None:
+        token = _make_jwt("user_rich")
+        user_data_pb = _build_pb_user_data_with_meta(
+            "list_grocery",
+            "My Grocery List",
+            stores=[("store_don", "Donelans")],
+            categories=[
+                ("cat_dairy", "Dairy", "dairy"),
+                ("cat_other", "Other", "other"),
+            ],
+            group_id="grp_1",
+        )
+        v2_bodies: list[bytes] = []
+        v1_bodies: list[bytes] = []
+
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
+                if request.url.path == "/data/user-data/get":
+                    return httpx.Response(200, content=user_data_pb)
+                if request.url.path == "/data/shopping-lists/update-v2":
+                    v2_bodies.append(_extract_multipart_part(request.content))
+                    return httpx.Response(200, content=b"")
+                if request.url.path == "/data/shopping-lists/update":
+                    v1_bodies.append(_extract_multipart_part(request.content))
+                    return httpx.Response(200, content=b"")
+                return httpx.Response(404)
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+
+            yogurt = GroceryItem(
+                id="item_yogurt",
+                name="Chobani Greek Yogurt 4 Pack",
+                quantity=2.0,
+                unit=Unit.PACK,
+                category="Dairy & Frozen Foods",
+                notes="Save up to $2.50",
+                price=Decimal("2.99"),
+                price_details="/pack",
+                store="Market Basket",
+            )
+            await client.add_item("list_grocery", yogurt)
+
+            # New store ("Market Basket") was created via update-v2 before adding item
+            assert len(v2_bodies) == 1
+            assert b"new-store" in v2_bodies[0]
+            assert b"Market Basket" in v2_bodies[0]
+
+            assert len(v1_bodies) == 1
+            handler_id, item_fields = _decode_first_list_item_fields(v1_bodies[0])
+            assert handler_id == "add-shopping-list-item"
+            assert item_fields[4] == [b"Chobani Greek Yogurt 4 Pack"]
+            assert item_fields[5] == [b"Save up to $2.50"]
+            assert item_fields[11] == [b"dairy"]
+            assert item_fields[13] == [b"dairy"]
+            assert item_fields[18] == [b"2 pack"]
+            assert len(item_fields[16]) == 1  # resolved/created Market Basket store ID
+            created_store_id = item_fields[16][0]
+            assert isinstance(created_store_id, bytes)
+
+            # Quantity protobuf carries amount, unit, and rawQuantity
+            qty_sub = dict((fn, val) for fn, _, val in _iter_proto_fields(item_fields[21][0]))  # type: ignore[arg-type]
+            assert qty_sub[1] == b"2"
+            assert qty_sub[2] == b"pack"
+            assert qty_sub[3] == b"2 pack"
+
+            # Category assignment links directly to grp_1 / cat_dairy
+            assign_sub = dict((fn, val) for fn, _, val in _iter_proto_fields(item_fields[20][0]))  # type: ignore[arg-type]
+            assert assign_sub[2] == b"grp_1"
+            assert assign_sub[3] == b"cat_dairy"
+
+            # Encode back into PBUserDataResponse and verify round-trip decoding
+            raw_item_bytes = b"".join(
+                _opv
+                for _, _, _opv in _iter_proto_fields(v1_bodies[0])
+                if isinstance(_opv, bytes) and b"Chobani" in _opv
+            )
+            # Extract listItem payload directly (field 6 of first PBListOperation)
+            for fn, _, val in _iter_proto_fields(v1_bodies[0]):
+                if fn == 1 and isinstance(val, bytes):
+                    for opf, _, opv in _iter_proto_fields(val):
+                        if opf == 6 and isinstance(opv, bytes):
+                            raw_item_bytes = opv
+            roundtrip_pb = _build_pb_user_data_with_meta(
+                "list_grocery",
+                "My Grocery List",
+                stores=[
+                    ("store_don", "Donelans"),
+                    (created_store_id.decode("utf-8"), "Market Basket"),
+                ],
+                categories=[("cat_dairy", "Dairy", "dairy")],
+                group_id="grp_1",
+                extra_item_bytes=[raw_item_bytes],
+            )
+            decoded_lists, _, _ = _decode_user_data_lists_with_meta(roundtrip_pb)
+            decoded_item = decoded_lists[0].items[0]
+            assert decoded_item.name == "Chobani Greek Yogurt 4 Pack"
+            assert decoded_item.quantity == 2.0
+            assert decoded_item.unit == Unit.PACK
+            assert decoded_item.category == "Dairy"
+            assert decoded_item.store == "Market Basket"
+            assert decoded_item.price == Decimal("2.99")
+            assert decoded_item.price_details == "/pack"
+            assert decoded_item.notes == "Save up to $2.50"
+
+            # Existing store matching reuses existing store ID without another new-store call
+            existing_store_item = GroceryItem(
+                id="item_don",
+                name="Milk",
+                quantity=1.0,
+                unit=Unit.GALLON,
+                category="Dairy",
+                store="donelans",
+                price=Decimal("4.29"),
+            )
+            await client.add_item("list_grocery", existing_store_item)
+            assert len(v2_bodies) == 1
+            _, don_fields = _decode_first_list_item_fields(v1_bodies[1])
+            assert don_fields[16] == [b"store_don"]
+
+    @pytest.mark.asyncio
+    async def test_update_item_preserves_unmanaged_fields_and_sync_cart(self) -> None:
+        token = _make_jwt("user_upd")
+        # Include unmanaged field 27 (ingredients) and field 17 (manualSortIndex) on existing item
+        existing_pb = (
+            _encode_field_str(1, "item_existing")
+            + _encode_field_str(3, "list_sync")
+            + _encode_field_str(4, "Salmon Fillets")
+            + _encode_field_str(11, "seafood")
+            + _encode_field_varint(17, 42)
+            + _encode_field_str(27, "recipe_ingredient_blob")
+        )
+        user_data_pb = _build_pb_user_data_with_meta(
+            "list_sync",
+            "Dinner List",
+            stores=[("store_mb", "Market Basket")],
+            categories=[("cat_seafood", "Seafood", "seafood")],
+            group_id="grp_sync",
+            extra_item_bytes=[existing_pb],
+        )
+        v1_bodies: list[bytes] = []
+
+        async with AnyListClient(email="user@test.com", password="pw") as client:
+            assert client._http is not None
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                if request.url.path == "/auth/token":
+                    return httpx.Response(200, json={"access_token": token})
+                if request.url.path == "/data/user-data/get":
+                    return httpx.Response(200, content=user_data_pb)
+                if request.url.path == "/data/shopping-lists/update":
+                    v1_bodies.append(_extract_multipart_part(request.content))
+                    return httpx.Response(200, content=b"")
+                return httpx.Response(404)
+
+            client._http._transport = httpx.MockTransport(handler)
+            await client.authenticate()
+            lists = await client.get_lists()
+            target_list = lists[0]
+
+            cart = OptimizedCart(
+                list_id="list_sync",
+                store_assignments={"item_existing": "Market Basket"},
+                total_cost=Decimal("7.99"),
+                estimated_savings=Decimal("2.00"),
+                comparisons=[
+                    PriceComparison(
+                        item=GroceryItem(
+                            id="item_existing",
+                            name="Salmon Fillets",
+                            quantity=2.0,
+                            unit=Unit.LB,
+                            category="Meat & Seafood",
+                        ),
+                        prices=[
+                            StorePrice(
+                                item_name="Salmon Fillets",
+                                store_name="Market Basket",
+                                price=Decimal("9.99"),
+                                sale_price=Decimal("7.99"),
+                                unit=Unit.LB,
+                                deal_details="Weekly flyer",
+                            )
+                        ],
+                    )
+                ],
+            )
+            updated = await client.sync_cart_to_list(cart, target_list)
+            assert len(updated) == 1
+            assert updated[0].store == "Market Basket"
+            assert updated[0].price == Decimal("7.99")
+            assert updated[0].category == "Seafood"
+
+            handler_id, upd_fields = _decode_first_list_item_fields(v1_bodies[0])
+            assert handler_id == "update-list-item"
+            assert upd_fields[16] == [b"store_mb"]
+            assert upd_fields[17] == [42]
+            assert upd_fields[27] == [b"recipe_ingredient_blob"]
+            assert upd_fields[18] == [b"2 lb"]

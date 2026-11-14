@@ -88,6 +88,13 @@ class GroceryItem(_ReloadSafeModel):
     unit: Unit = Field(default=Unit.EACH, description="Unit of measurement")
     category: str | None = Field(default=None, description="e.g., 'Produce', 'Dairy'")
     notes: str | None = Field(default=None, description="Free-text shopper notes")
+    price: Decimal | None = Field(
+        default=None, ge=Decimal("0"), description="Item unit or sale price in USD"
+    )
+    price_details: str | None = Field(
+        default=None, description="Optional price qualifier (e.g., '/lb', 'Save $1.00')"
+    )
+    store: str | None = Field(default=None, description="Assigned or preferred store name")
     checked: bool = Field(default=False, description="Marked off in shopping session")
 
 
