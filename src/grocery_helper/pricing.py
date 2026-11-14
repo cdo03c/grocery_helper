@@ -25,6 +25,12 @@ from typing import Any, Protocol
 import httpx
 
 from grocery_helper.config import settings
+from grocery_helper.flyers import (
+    BaseFlyerProvider,
+    FlippFlyerProvider,
+    MarketBasketFlyerProvider,
+    WholeFoodsFlyerProvider,
+)
 from grocery_helper.matcher import find_best_match, parse_quantity_and_unit
 from grocery_helper.models import (
     GroceryItem,
@@ -96,6 +102,7 @@ class MockPricingProvider:
     # Store multipliers and sale probabilities: (multiplier, sale_multiplier or None)
     STORE_PROFILES: dict[str, tuple[Decimal, Decimal | None]] = {
         "ALDI": (Decimal("0.85"), None),
+        "Market Basket": (Decimal("0.88"), None),
         "Trader Joe's": (Decimal("0.95"), None),
         "Kroger": (Decimal("1.02"), Decimal("0.82")),
         "Whole Foods": (Decimal("1.25"), Decimal("1.05")),
@@ -389,10 +396,38 @@ class PricingService:
         store_zip: str = "",
         provider: BasePricingProvider | None = None,
         kroger_provider: KrogerPricingProvider | None = None,
+        enable_live_flyers: bool | None = None,
+        enable_flipp: bool | None = None,
+        flyer_only_for_live_stores: bool = False,
+        whole_foods_store_id: str | None = None,
+        whole_foods_prime: bool | None = None,
+        flipp_merchants: list[str] | set[str] | None = None,
+        market_basket_provider: MarketBasketFlyerProvider | None = None,
+        whole_foods_provider: WholeFoodsFlyerProvider | None = None,
+        flipp_provider: FlippFlyerProvider | None = None,
     ) -> None:
         self._store_zip = store_zip
         self._provider: BasePricingProvider = provider or MockPricingProvider()
         self._kroger_provider: KrogerPricingProvider = kroger_provider or KrogerPricingProvider()
+        self._enable_live_flyers: bool = (
+            settings.enable_live_flyers if enable_live_flyers is None else enable_live_flyers
+        )
+        self._enable_flipp: bool = settings.enable_flipp if enable_flipp is None else enable_flipp
+        self._flyer_only_for_live_stores = flyer_only_for_live_stores
+        self._market_basket_provider: MarketBasketFlyerProvider = (
+            market_basket_provider or MarketBasketFlyerProvider()
+        )
+        self._whole_foods_provider: WholeFoodsFlyerProvider = (
+            whole_foods_provider
+            or WholeFoodsFlyerProvider(
+                store_id=whole_foods_store_id,
+                use_prime=whole_foods_prime,
+            )
+        )
+        self._flipp_provider: FlippFlyerProvider = flipp_provider or FlippFlyerProvider(
+            postal_code=store_zip or "02139",
+            merchants=flipp_merchants,
+        )
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -410,7 +445,83 @@ class PricingService:
             )
         else:
             kroger_tag = "kroger_off"
-        return cache_key(provider_tag, kroger_tag, item.name, item.unit.value, self._store_zip)
+        if self._enable_live_flyers:
+            mb_tag = (
+                "mb_std"
+                if type(self._market_basket_provider) is MarketBasketFlyerProvider
+                else f"mb_custom:{id(self._market_basket_provider)}"
+            )
+            wf_tag = (
+                f"wf_std:{self._whole_foods_provider.store_id}:{self._whole_foods_provider.use_prime}"
+                if type(self._whole_foods_provider) is WholeFoodsFlyerProvider
+                else f"wf_custom:{id(self._whole_foods_provider)}"
+            )
+            if self._enable_flipp:
+                merch_key = (
+                    ",".join(sorted(self._flipp_provider.merchants))
+                    if self._flipp_provider.merchants
+                    else "all"
+                )
+                flipp_tag = (
+                    f"flipp_std:{self._flipp_provider.postal_code}:{merch_key}"
+                    if type(self._flipp_provider) is FlippFlyerProvider
+                    else f"flipp_custom:{id(self._flipp_provider)}"
+                )
+            else:
+                flipp_tag = "flipp_off"
+            flyer_tag = f"flyers_on:{mb_tag}:{wf_tag}:{flipp_tag}:{self._flyer_only_for_live_stores}"
+        else:
+            flyer_tag = "flyers_off"
+        return cache_key(
+            provider_tag,
+            kroger_tag,
+            flyer_tag,
+            item.name,
+            item.unit.value,
+            self._store_zip,
+        )
+
+    @staticmethod
+    async def _safe_flyer_prices(
+        provider: BaseFlyerProvider,
+        item: GroceryItem,
+        store_zip: str,
+    ) -> list[StorePrice]:
+        """Fetch flyer overlay prices while isolating network/parse errors per source."""
+        try:
+            return await provider.get_prices(item, store_zip)
+        except Exception as exc:
+            logger.warning(
+                "Flyer price lookup failed for %s (%s): %s",
+                type(provider).__name__,
+                item.name,
+                exc,
+            )
+            return []
+
+    @staticmethod
+    async def _safe_warm_flyer(
+        provider: BaseFlyerProvider,
+    ) -> None:
+        """Warm the flyer cache once before running concurrent item comparisons."""
+        try:
+            await provider.fetch_flyer()
+        except Exception as exc:
+            logger.warning("Pre-warming flyer failed for %s: %s", type(provider).__name__, exc)
+
+    @staticmethod
+    def _merge_store_prices(
+        base: list[StorePrice],
+        overlay: list[StorePrice],
+        *,
+        clear_stores: set[str] | None = None,
+    ) -> list[StorePrice]:
+        """Overlay live store prices onto base prices, replacing matching store names."""
+        replaced_stores = {sp.store_name for sp in overlay}
+        if clear_stores:
+            replaced_stores |= clear_stores
+        kept = [p for p in base if p.store_name not in replaced_stores]
+        return kept + overlay
 
     async def fetch_prices(self, item: GroceryItem) -> list[StorePrice]:
         """
@@ -427,10 +538,45 @@ class PricingService:
         prices = await self._provider.get_prices(item, self._store_zip)
 
         # If Kroger live provider is configured, overlay live Kroger prices
+        live_kroger: list[StorePrice] = []
         if self._kroger_provider.is_configured:
             live_kroger = await self._kroger_provider.get_prices(item, self._store_zip)
             if live_kroger:
-                prices = [p for p in prices if p.store_name != "Kroger"] + live_kroger
+                prices = self._merge_store_prices(prices, live_kroger)
+
+        # Overlay live weekly sale flyers (Flipp generic aggregator, plus direct MB & Whole Foods)
+        if self._enable_live_flyers:
+            use_flipp = self._enable_flipp and bool(self._store_zip.strip())
+            tasks: list[Any] = [
+                self._safe_flyer_prices(self._market_basket_provider, item, self._store_zip),
+                self._safe_flyer_prices(self._whole_foods_provider, item, self._store_zip),
+            ]
+            if use_flipp:
+                tasks.append(
+                    self._safe_flyer_prices(self._flipp_provider, item, self._store_zip)
+                )
+            results = await asyncio.gather(*tasks)
+            mb_live: list[StorePrice] = results[0]
+            wf_live: list[StorePrice] = results[1]
+            flipp_live: list[StorePrice] = results[2] if use_flipp else []
+
+            # Apply Flipp first, then let store-specific direct providers take precedence
+            if flipp_live:
+                skip_flipp = {sp.store_name for sp in live_kroger}
+                filtered_flipp = [sp for sp in flipp_live if sp.store_name not in skip_flipp]
+                if filtered_flipp:
+                    prices = self._merge_store_prices(prices, filtered_flipp)
+
+            clear_direct = (
+                {MarketBasketFlyerProvider.STORE_NAME, WholeFoodsFlyerProvider.STORE_NAME}
+                if self._flyer_only_for_live_stores
+                else None
+            )
+            prices = self._merge_store_prices(
+                prices,
+                mb_live + wf_live,
+                clear_stores=clear_direct,
+            )
 
         set_cached_price(key, [sp.model_copy() for sp in prices])
         return prices
@@ -462,6 +608,12 @@ class PricingService:
             raise ValueError("max_stores must be at least 1")
 
         allowed_set = set(allowed_stores) if allowed_stores is not None else None
+
+        if self._enable_live_flyers:
+            await asyncio.gather(
+                self._safe_warm_flyer(self._market_basket_provider),
+                self._safe_warm_flyer(self._whole_foods_provider),
+            )
 
         # Fetch comparisons concurrently across all items, sharing an HTTP client for Kroger
         if (

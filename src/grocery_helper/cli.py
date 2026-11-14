@@ -21,6 +21,13 @@ from pathlib import Path
 
 from grocery_helper.anylist_client import AnyListAPIError, AnyListAuthError, AnyListClient
 from grocery_helper.config import settings
+from grocery_helper.flyers import (
+    FlippFlyerProvider,
+    MarketBasketFlyerProvider,
+    WholeFoodsFlyerProvider,
+    match_flyer_deals,
+)
+from grocery_helper.models import FlyerDeal
 from grocery_helper.pricing import PricingService
 from grocery_helper.utils import configure_logging, format_currency, truncate
 
@@ -67,9 +74,110 @@ def build_parser() -> argparse.ArgumentParser:
         dest="allowed_stores",
         nargs="+",
         default=None,
-        help="Specific store names to consider (e.g. --stores ALDI 'Trader Joe\\'s')",
+        help="Specific store names to consider (e.g. --stores ALDI 'Market Basket' 'Whole Foods')",
     )
     optimise_cmd.add_argument(
+        "--live-flyers",
+        action="store_true",
+        dest="live_flyers",
+        help="Overlay live weekly advertised sale prices from Market Basket and Whole Foods",
+    )
+    optimise_cmd.add_argument(
+        "--advertised-only",
+        action="store_true",
+        dest="advertised_only",
+        help="For Market Basket and Whole Foods, use only advertised weekly flyer items",
+    )
+    optimise_cmd.add_argument(
+        "--wf-store-id",
+        dest="wf_store_id",
+        default=settings.whole_foods_store_id,
+        help=(
+            "Whole Foods store ID for sales flyer lookup "
+            f"(default: {settings.whole_foods_store_id})"
+        ),
+    )
+    optimise_cmd.add_argument(
+        "--no-prime",
+        action="store_true",
+        dest="no_prime",
+        help="Use regular Whole Foods sale prices instead of Prime member prices",
+    )
+    optimise_cmd.add_argument(
+        "--no-flipp",
+        action="store_true",
+        dest="no_flipp",
+        help="Disable generic nearby store circular lookups via Flipp when --live-flyers is set",
+    )
+    optimise_cmd.add_argument(
+        "--flipp-merchants",
+        dest="flipp_merchants",
+        nargs="+",
+        default=None,
+        help="Restrict Flipp lookup to specific store names (e.g. 'Star Market' Hannaford ALDI)",
+    )
+    optimise_cmd.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="Output raw JSON instead of formatted text",
+    )
+
+    # ── flyers ────────────────────────────────────────────────────────────
+    flyers_cmd = subparsers.add_parser(
+        "flyers",
+        help="List active weekly on-sale items from Market Basket, Whole Foods, and Flipp",
+    )
+    flyers_cmd.add_argument(
+        "--store",
+        choices=["all", "mb", "wf", "flipp"],
+        default="all",
+        help=(
+            "Which flyer source(s) to list: all, mb (Market Basket), "
+            "wf (Whole Foods), or flipp (all nearby grocery stores by ZIP)"
+        ),
+    )
+    flyers_cmd.add_argument(
+        "--zip",
+        dest="store_zip",
+        default=settings.default_store_zip or "02139",
+        help="ZIP/postal code for Flipp circular discovery (default: from config or 02139)",
+    )
+    flyers_cmd.add_argument(
+        "--merchants",
+        nargs="+",
+        default=None,
+        help="Optional Flipp merchant filter (e.g. --merchants 'Star Market' Hannaford ALDI)",
+    )
+    flyers_cmd.add_argument(
+        "--wf-store-id",
+        dest="wf_store_id",
+        default=settings.whole_foods_store_id,
+        help=f"Whole Foods store ID (default: {settings.whole_foods_store_id})",
+    )
+    flyers_cmd.add_argument(
+        "--no-prime",
+        action="store_true",
+        dest="no_prime",
+        help="Use regular Whole Foods sale prices instead of Prime member prices",
+    )
+    flyers_cmd.add_argument(
+        "--search",
+        default=None,
+        help="Filter on-sale items by keyword (name, brand, or department)",
+    )
+    flyers_cmd.add_argument(
+        "--list-id",
+        dest="list_id",
+        default=None,
+        help="Optional AnyList list ID to highlight matching on-sale items for your list",
+    )
+    flyers_cmd.add_argument(
+        "--demo",
+        action="store_true",
+        help="When matching --list-id, load from sample demo lists",
+    )
+    flyers_cmd.add_argument(
         "--json",
         action="store_true",
         dest="as_json",
@@ -107,7 +215,15 @@ async def _async_optimise(args: argparse.Namespace) -> int:
     is_demo = args.demo or not (settings.anylist_email and settings.anylist_password)
 
     client = AnyListClient(demo_mode=is_demo)
-    pricing = PricingService(store_zip=args.store_zip)
+    pricing = PricingService(
+        store_zip=args.store_zip,
+        enable_live_flyers=True if getattr(args, "live_flyers", False) else None,
+        enable_flipp=False if getattr(args, "no_flipp", False) else None,
+        flyer_only_for_live_stores=bool(getattr(args, "advertised_only", False)),
+        whole_foods_store_id=getattr(args, "wf_store_id", None),
+        whole_foods_prime=False if getattr(args, "no_prime", False) else None,
+        flipp_merchants=getattr(args, "flipp_merchants", None),
+    )
 
     try:
         async with client:
@@ -193,6 +309,149 @@ def cmd_optimise(args: argparse.Namespace) -> None:
         sys.exit(exit_code)
 
 
+async def _async_flyers(args: argparse.Namespace) -> int:
+    """Async execution logic for the flyers CLI command."""
+    use_prime = not bool(getattr(args, "no_prime", False))
+    deals: list[FlyerDeal] = []
+    errors: list[str] = []
+
+    fetch_tasks: list[tuple[str, asyncio.Task[list[FlyerDeal]]]] = []
+    if args.store in {"all", "mb"}:
+        mb_provider = MarketBasketFlyerProvider()
+        fetch_tasks.append(("Market Basket", asyncio.create_task(mb_provider.fetch_flyer())))
+    if args.store in {"all", "wf"}:
+        wf_provider = WholeFoodsFlyerProvider(
+            store_id=args.wf_store_id,
+            use_prime=use_prime,
+        )
+        fetch_tasks.append(("Whole Foods", asyncio.create_task(wf_provider.fetch_flyer())))
+    if args.store in {"all", "flipp"}:
+        flipp_provider = FlippFlyerProvider(
+            postal_code=getattr(args, "store_zip", "02139") or "02139",
+            merchants=getattr(args, "merchants", None),
+        )
+        fetch_tasks.append(("Flipp", asyncio.create_task(flipp_provider.fetch_flyer())))
+
+    for store_label, task in fetch_tasks:
+        try:
+            fetched = await task
+            if store_label == "Flipp" and args.store == "all":
+                fetched = [
+                    d for d in fetched if d.store_name != MarketBasketFlyerProvider.STORE_NAME
+                ]
+            deals.extend(fetched)
+        except Exception as err:
+            errors.append(f"{store_label}: {err}")
+
+    for err_msg in errors:
+        print(f"Warning: failed to fetch {err_msg}", file=sys.stderr)
+
+    if not deals and errors:
+        return 1
+
+    search = (args.search or "").strip().lower()
+    if search:
+        deals = [
+            d
+            for d in deals
+            if search in d.product_name.lower()
+            or search in (d.brand or "").lower()
+            or search in (d.description or "").lower()
+            or search in (d.department or "").lower()
+        ]
+
+    matched_items: list[dict[str, object]] = []
+    if args.list_id:
+        is_demo = args.demo or not (settings.anylist_email and settings.anylist_password)
+        client = AnyListClient(demo_mode=is_demo)
+        try:
+            async with client:
+                await client.authenticate()
+                grocery_list = await client.get_list(args.list_id)
+        except (AnyListAuthError, AnyListAPIError) as err:
+            print(f"Error: {err}", file=sys.stderr)
+            return 1
+
+        stores = sorted({d.store_name for d in deals})
+        for item in grocery_list.items:
+            for store in stores:
+                store_deals = [d for d in deals if d.store_name == store]
+                best = match_flyer_deals(item.name, store_deals, limit=1)
+                if not best:
+                    continue
+                deal, score = best[0]
+                eff = deal.effective_sale_price(use_prime=use_prime)
+                matched_items.append(
+                    {
+                        "list_item": item.name,
+                        "store": store,
+                        "product_name": deal.product_name,
+                        "effective_price": str(eff) if eff is not None else None,
+                        "sale_price": str(deal.sale_price) if deal.sale_price is not None else None,
+                        "prime_price": (
+                            str(deal.prime_price) if deal.prime_price is not None else None
+                        ),
+                        "regular_price": (
+                            str(deal.regular_price) if deal.regular_price is not None else None
+                        ),
+                        "deal_text": deal.deal_text,
+                        "match_score": round(score, 3),
+                    }
+                )
+
+    if args.as_json:
+        payload: dict[str, object] = {
+            "count": len(deals),
+            "deals": [d.model_dump(mode="json") for d in deals],
+        }
+        if args.list_id:
+            payload["list_matches"] = matched_items
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print("=" * 84)
+    print(f"🏷️  Weekly On-Sale Flyer Items ({len(deals)} deals)")
+    print("=" * 84)
+    if args.list_id:
+        print(f"Matches for List '{args.list_id}' ({len(matched_items)}):")
+        for match in matched_items:
+            price_str = (
+                f"${match['effective_price']}"
+                if match["effective_price"] is not None
+                else str(match["deal_text"] or "-")
+            )
+            print(
+                f"  • {match['list_item']} -> [{match['store']}] "
+                f"{match['product_name']} ({price_str})"
+            )
+        print("-" * 84)
+
+    print(f"{'Store':<15} {'Product':<38} {'Sale Price':<16} {'Deal / Reg'}")
+    print("-" * 84)
+    for deal in deals:
+        eff = deal.effective_sale_price(use_prime=use_prime)
+        price_disp = (
+            f"{format_currency(eff)}/{deal.unit.value}"
+            if (eff is not None and deal.unit.value != "each")
+            else (format_currency(eff) if eff is not None else "-")
+        )
+        reg_disp = format_currency(deal.regular_price) if deal.regular_price is not None else "-"
+        detail = deal.deal_text or f"Reg {reg_disp}"
+        print(
+            f"{deal.store_name:<15} {truncate(deal.product_name, 37):<38} "
+            f"{truncate(price_disp, 15):<16} {truncate(detail, 24)}"
+        )
+    print("=" * 84)
+    return 0
+
+
+def cmd_flyers(args: argparse.Namespace) -> None:
+    """CLI flyers command entry point."""
+    exit_code = asyncio.run(_async_flyers(args))
+    if exit_code != 0:
+        sys.exit(exit_code)
+
+
 def main() -> None:
     configure_logging()
     parser = build_parser()
@@ -201,6 +460,7 @@ def main() -> None:
     dispatch = {
         "serve": cmd_serve,
         "optimise": cmd_optimise,
+        "flyers": cmd_flyers,
     }
 
     handler = dispatch.get(args.command)

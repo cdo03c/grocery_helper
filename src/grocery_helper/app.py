@@ -23,7 +23,14 @@ import streamlit as st
 from grocery_helper import __version__
 from grocery_helper.anylist_client import AnyListAPIError, AnyListAuthError, AnyListClient
 from grocery_helper.config import settings
-from grocery_helper.models import GroceryItem, GroceryList, OptimizedCart, Unit
+from grocery_helper.flyers import (
+    WHOLE_FOODS_STORES,
+    FlippFlyerProvider,
+    MarketBasketFlyerProvider,
+    WholeFoodsFlyerProvider,
+    match_flyer_deals,
+)
+from grocery_helper.models import FlyerDeal, GroceryItem, GroceryList, OptimizedCart, Unit
 from grocery_helper.pricing import MockPricingProvider, PricingService
 from grocery_helper.utils import configure_logging, format_currency, format_savings
 
@@ -115,6 +122,57 @@ def render_sidebar() -> dict[str, Any]:
             max_stores = None
             st.warning("Select at least one store to compare prices.")
 
+        st.subheader("🏷️ Weekly Flyers (MB, Whole Foods & Flipp)")
+        enable_live_flyers = st.toggle(
+            "Enable Live Weekly Flyers",
+            value=settings.enable_live_flyers,
+            help=(
+                "Overlay live advertised weekly sale prices from Market Basket, "
+                "Whole Foods, and nearby stores on Flipp onto price comparisons."
+            ),
+            key="live_flyers_toggle",
+        )
+        enable_flipp = st.toggle(
+            "Include Nearby Flipp Stores (by ZIP)",
+            value=settings.enable_flipp,
+            disabled=not enable_live_flyers,
+            help=(
+                "Discover local grocery store circulars for your ZIP code via Flipp "
+                "(e.g. Star Market, Shaw's, Stop & Shop, Hannaford, Wegmans, ALDI, Big Y, Costco)."
+            ),
+            key="flipp_toggle",
+        )
+        advertised_only = st.checkbox(
+            "Advertised flyer prices only (MB & Whole Foods)",
+            value=False,
+            disabled=not enable_live_flyers,
+            help=(
+                "Show only live weekly sale items for Market Basket and Whole Foods "
+                "instead of mock estimates for unlisted items."
+            ),
+            key="advertised_only_toggle",
+        )
+        wf_store_id_raw = st.text_input(
+            "Whole Foods Store ID",
+            value=settings.whole_foods_store_id,
+            help=(
+                "Store ID from wholefoodsmarket.com/sales-flyer?store-id=... "
+                "(e.g., 10010 Cambridge, 10380 Medford, 10156 Framingham, "
+                "10090 Bedford, 10371 Andover)."
+            ),
+            key="wf_store_id_input",
+        )
+        wf_store_id = wf_store_id_raw.strip() or settings.whole_foods_store_id
+        if wf_store_id in WHOLE_FOODS_STORES:
+            wf_name, wf_zip = WHOLE_FOODS_STORES[wf_store_id]
+            st.caption(f"Whole Foods location: {wf_name} ({wf_zip})")
+        wf_prime = st.toggle(
+            "Whole Foods Prime Pricing",
+            value=settings.whole_foods_prime,
+            help="Apply Amazon Prime member sale prices when listed in the Whole Foods flyer.",
+            key="wf_prime_toggle",
+        )
+
         st.divider()
         st.caption(f"Grocery Helper v{__version__}")
 
@@ -125,6 +183,11 @@ def render_sidebar() -> dict[str, Any]:
         "demo_mode": demo_mode,
         "allowed_stores": allowed_stores,
         "max_stores": max_stores,
+        "enable_live_flyers": enable_live_flyers,
+        "enable_flipp": enable_flipp,
+        "advertised_only": advertised_only,
+        "whole_foods_store_id": wf_store_id,
+        "whole_foods_prime": wf_prime,
     }
 
 
@@ -251,14 +314,137 @@ async def _run_pricing(
     store_zip: str,
     allowed_stores: list[str] | None = None,
     max_stores: int | None = None,
+    enable_live_flyers: bool | None = None,
+    enable_flipp: bool | None = None,
+    flyer_only_for_live_stores: bool = False,
+    whole_foods_store_id: str | None = None,
+    whole_foods_prime: bool | None = None,
 ) -> OptimizedCart:
     """Fetch prices and optimize the cart."""
-    service = PricingService(store_zip=store_zip)
+    service = PricingService(
+        store_zip=store_zip,
+        enable_live_flyers=enable_live_flyers,
+        enable_flipp=enable_flipp,
+        flyer_only_for_live_stores=flyer_only_for_live_stores,
+        whole_foods_store_id=whole_foods_store_id,
+        whole_foods_prime=whole_foods_prime,
+    )
     return await service.optimise(
         grocery_list,
         allowed_stores=allowed_stores,
         max_stores=max_stores,
     )
+
+
+async def _fetch_all_flyers(
+    wf_store_id: str,
+    store_zip: str = "02139",
+    include_flipp: bool = True,
+) -> tuple[list[FlyerDeal], list[FlyerDeal], list[FlyerDeal], list[str]]:
+    """Fetch weekly flyers from Market Basket, Whole Foods, and optionally Flipp concurrently."""
+    mb_provider = MarketBasketFlyerProvider()
+    wf_provider = WholeFoodsFlyerProvider(store_id=wf_store_id)
+    tasks: list[Any] = [mb_provider.fetch_flyer(), wf_provider.fetch_flyer()]
+    if include_flipp:
+        flipp_provider = FlippFlyerProvider(postal_code=store_zip or "02139")
+        tasks.append(flipp_provider.fetch_flyer())
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    warnings: list[str] = []
+    mb_deals: list[FlyerDeal] = []
+    wf_deals: list[FlyerDeal] = []
+    flipp_deals: list[FlyerDeal] = []
+
+    if isinstance(results[0], BaseException):
+        warnings.append(f"Market Basket flyer fetch failed: {results[0]}")
+    else:
+        mb_deals = results[0]
+
+    if isinstance(results[1], BaseException):
+        warnings.append(f"Whole Foods flyer fetch failed: {results[1]}")
+    else:
+        wf_deals = results[1]
+
+    if include_flipp and len(results) > 2:
+        if isinstance(results[2], BaseException):
+            warnings.append(f"Flipp flyer fetch failed: {results[2]}")
+        else:
+            # Prefer Market Basket's direct circular when both exist to avoid duplicates
+            flipp_deals = [
+                d for d in results[2] if d.store_name != MarketBasketFlyerProvider.STORE_NAME
+            ]
+
+    return mb_deals, wf_deals, flipp_deals, warnings
+
+
+def _format_deal_price(amount: Decimal | None, unit: Unit) -> str:
+    """Format an optional flyer price with unit context when priced by weight/volume."""
+    if amount is None:
+        return "-"
+    unit_suffix = f" /{unit.value}" if unit != Unit.EACH else ""
+    return f"{format_currency(amount)}{unit_suffix}"
+
+
+def build_flyer_rows(deals: list[FlyerDeal], use_prime: bool = True) -> list[dict[str, Any]]:
+    """Build display rows for browsing weekly on-sale flyer items."""
+    rows: list[dict[str, Any]] = []
+    for deal in deals:
+        effective = deal.effective_sale_price(use_prime=use_prime)
+        validity = ""
+        if deal.valid_from and deal.valid_to:
+            validity = f"{deal.valid_from} – {deal.valid_to}"
+        elif deal.valid_to:
+            validity = f"Through {deal.valid_to}"
+
+        rows.append(
+            {
+                "Store": deal.store_name,
+                "Item": deal.product_name,
+                "Brand / Details": deal.brand or deal.description or "-",
+                "Best Sale Price": _format_deal_price(effective, deal.unit),
+                "Prime Price": _format_deal_price(deal.prime_price, deal.unit),
+                "Regular Price": _format_deal_price(deal.regular_price, deal.unit),
+                "Deal": deal.deal_text or ("Featured" if deal.featured else "-"),
+                "Department": deal.department or "-",
+                "Valid": validity or "-",
+            }
+        )
+    return rows
+
+
+def build_matched_flyer_rows(
+    grocery_list: GroceryList,
+    deals: list[FlyerDeal],
+    use_prime: bool = True,
+) -> list[dict[str, Any]]:
+    """Match items on a grocery list against active weekly flyer deals."""
+    rows: list[dict[str, Any]] = []
+    stores = sorted({d.store_name for d in deals})
+    for item in grocery_list.items:
+        for store in stores:
+            store_deals = [d for d in deals if d.store_name == store]
+            matches = match_flyer_deals(item.name, store_deals, limit=1)
+            if not matches:
+                continue
+            deal, score = matches[0]
+            effective = deal.effective_sale_price(use_prime=use_prime)
+            display_price = _format_deal_price(effective, deal.unit)
+            if display_price == "-" and deal.deal_text:
+                display_price = deal.deal_text
+
+            rows.append(
+                {
+                    "List Item": item.name,
+                    "Store": deal.store_name,
+                    "Matched Flyer Item": deal.product_name,
+                    "Sale Price": display_price,
+                    "Regular Price": _format_deal_price(deal.regular_price, deal.unit),
+                    "Deal Details": deal.deal_text or deal.description or "-",
+                    "Match": f"{score:.0%}",
+                }
+            )
+    return rows
 
 
 def build_comparison_rows(cart: OptimizedCart) -> list[dict[str, Any]]:
@@ -277,8 +463,11 @@ def build_comparison_rows(cart: OptimizedCart) -> list[dict[str, Any]]:
             if store in price_map:
                 sp = price_map[store]
                 unit_suffix = f" /{sp.unit}" if sp.unit != comp.item.unit else ""
+                live_tag = " 🏷️" if sp.is_live else ""
                 if sp.sale_price is not None:
-                    row[store] = f"{format_currency(sp.sale_price)}{unit_suffix} (Sale)"
+                    row[store] = f"{format_currency(sp.sale_price)}{unit_suffix} (Sale{live_tag})"
+                elif sp.is_live:
+                    row[store] = f"{format_currency(sp.price)}{unit_suffix} (Live{live_tag})"
                 else:
                     row[store] = f"{format_currency(sp.price)}{unit_suffix}"
             else:
@@ -445,6 +634,126 @@ def render_optimised_cart(
                     st.write(f"- 📋 **{cl.name}** ({len(cl.items)} items)")
 
 
+def render_flyers_tab(grocery_list: GroceryList, config: dict[str, Any]) -> None:
+    """Render live weekly advertised sale items from Market Basket, Whole Foods, and Flipp."""
+    st.subheader("🏷️ Weekly Sales Flyers (Market Basket, Whole Foods & Flipp)")
+    wf_store_id = str(config.get("whole_foods_store_id") or settings.whole_foods_store_id)
+    store_zip = str(config.get("store_zip") or settings.default_store_zip or "02139")
+    include_flipp = bool(config.get("enable_flipp", settings.enable_flipp))
+    use_prime = bool(config.get("whole_foods_prime", settings.whole_foods_prime))
+    wf_label = WHOLE_FOODS_STORES.get(wf_store_id, (f"Store #{wf_store_id}", ""))[0]
+    flipp_desc = f" & Flipp (ZIP {store_zip})" if include_flipp else ""
+    st.caption(
+        f"Sources: shopmarketbasket.com/weekly-flyer, "
+        f"Whole Foods ({wf_label}, ID {wf_store_id}){flipp_desc}."
+    )
+
+    cache_state_key = "loaded_flyers_payload"
+    refresh_clicked = st.button(
+        "🔄 Load / Refresh Live Weekly Flyers",
+        key="refresh_flyers_btn",
+        help=(
+            "Fetch current weekly sales circulars from Market Basket, "
+            "Whole Foods, and nearby stores on Flipp."
+        ),
+    )
+
+    cached_payload = st.session_state.get(cache_state_key)
+    cache_sig = (wf_store_id, store_zip, include_flipp)
+    should_auto_load = bool(config.get("enable_live_flyers")) and (
+        not isinstance(cached_payload, dict) or cached_payload.get("cache_sig") != cache_sig
+    )
+
+    if refresh_clicked or should_auto_load:
+        with st.spinner("Loading live weekly flyers across local stores..."):
+            mb_deals, wf_deals, flipp_deals, warnings = run_async(
+                _fetch_all_flyers(wf_store_id, store_zip=store_zip, include_flipp=include_flipp)
+            )
+        cached_payload = {
+            "cache_sig": cache_sig,
+            "deals": mb_deals + wf_deals + flipp_deals,
+            "mb_count": len(mb_deals),
+            "wf_count": len(wf_deals),
+            "flipp_count": len(flipp_deals),
+            "warnings": warnings,
+        }
+        st.session_state[cache_state_key] = cached_payload
+
+    if not isinstance(cached_payload, dict):
+        st.info(
+            "Click **Load / Refresh Live Weekly Flyers** above (or toggle "
+            "**Enable Live Weekly Flyers** in the sidebar) to view active weekly sale items."
+        )
+        return
+
+    for warn in cached_payload.get("warnings", []):
+        st.warning(warn)
+
+    deals: list[FlyerDeal] = cached_payload.get("deals", [])
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Market Basket Deals", cached_payload.get("mb_count", 0))
+    with col2:
+        st.metric("Whole Foods Deals", cached_payload.get("wf_count", 0))
+    with col3:
+        st.metric("Flipp Nearby Deals", cached_payload.get("flipp_count", 0))
+    with col4:
+        matched_rows = build_matched_flyer_rows(grocery_list, deals, use_prime=use_prime)
+        st.metric("Matches on Your List", len(matched_rows))
+
+    st.markdown("#### 🎯 On-Sale Matches for Your Current List")
+    if matched_rows:
+        st.dataframe(pd.DataFrame(matched_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("No items from your current list matched the active weekly flyers.")
+
+    st.divider()
+    st.markdown("#### 📋 Browse All Weekly On-Sale Items")
+    store_options = ["All Stores"] + sorted({d.store_name for d in deals})
+    col_store, col_search, col_feat = st.columns([1, 2, 1])
+    with col_store:
+        store_filter = st.selectbox(
+            "Filter Store",
+            options=store_options,
+            key="flyer_store_filter",
+        )
+    with col_search:
+        search_text = (
+            st.text_input(
+                "Search Flyer Items",
+                placeholder="e.g. chicken, salmon, strawberries, yogurt...",
+                key="flyer_search_input",
+            )
+            .strip()
+            .lower()
+        )
+    with col_feat:
+        featured_only = st.checkbox("Featured Only", value=False, key="flyer_featured_only")
+
+    filtered_deals = [
+        d
+        for d in deals
+        if (store_filter == "All Stores" or d.store_name == store_filter)
+        and (not featured_only or d.featured)
+        and (
+            not search_text
+            or search_text in d.product_name.lower()
+            or search_text in (d.brand or "").lower()
+            or search_text in (d.description or "").lower()
+            or search_text in (d.department or "").lower()
+        )
+    ]
+    st.caption(f"Showing {len(filtered_deals)} of {len(deals)} weekly sale items")
+    if filtered_deals:
+        st.dataframe(
+            pd.DataFrame(build_flyer_rows(filtered_deals, use_prime=use_prime)),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("No weekly sale items match your current filter.")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -516,23 +825,46 @@ def main() -> None:
             st.warning("Select at least one store in the sidebar to view price comparisons.")
             return
 
+        all_baseline_stores = set(MockPricingProvider.STORE_PROFILES.keys())
+        selected_stores = config.get("allowed_stores")
+        effective_allowed_stores = (
+            None
+            if (
+                config.get("enable_live_flyers")
+                and config.get("enable_flipp")
+                and isinstance(selected_stores, list)
+                and set(selected_stores) == all_baseline_stores
+            )
+            else selected_stores
+        )
+
         with st.spinner("Fetching pricing & finding optimal deals..."):
             cart = run_async(
                 _run_pricing(
                     selected_list,
                     config["store_zip"],
-                    allowed_stores=config.get("allowed_stores"),
+                    allowed_stores=effective_allowed_stores,
                     max_stores=config.get("max_stores"),
+                    enable_live_flyers=config.get("enable_live_flyers"),
+                    enable_flipp=config.get("enable_flipp"),
+                    flyer_only_for_live_stores=bool(config.get("advertised_only")),
+                    whole_foods_store_id=config.get("whole_foods_store_id"),
+                    whole_foods_prime=config.get("whole_foods_prime"),
                 )
             )
 
-        tab_compare, tab_cart = st.tabs(["Price Comparison", "Optimised Cart"])
+        tab_compare, tab_cart, tab_flyers = st.tabs(
+            ["Price Comparison", "Optimised Cart", "🏷️ Weekly Sales & Flyers"]
+        )
 
         with tab_compare:
             render_price_comparison(cart)
 
         with tab_cart:
             render_optimised_cart(cart, selected_list, config=config)
+
+        with tab_flyers:
+            render_flyers_tab(selected_list, config)
     else:
         st.info("Select a grocery list from the dropdown above to get started.", icon="👆")
 

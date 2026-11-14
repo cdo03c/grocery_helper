@@ -91,12 +91,47 @@ class StorePrice(BaseModel):
     price: Decimal = Field(ge=Decimal("0"), description="Unit price in USD")
     unit: Unit = Field(default=Unit.EACH)
     sale_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    is_live: bool = Field(
+        default=False, description="Whether this price came from a live store or flyer feed"
+    )
+    matched_product_name: str | None = Field(
+        default=None, description="Matched store product or flyer item title"
+    )
+    deal_details: str | None = Field(
+        default=None, description="Promotional note (e.g. '2 for $5 · Save $1.50')"
+    )
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def effective_price(self) -> Decimal:
         """Return sale price if available, otherwise regular price."""
         return self.sale_price if self.sale_price is not None else self.price
+
+
+class FlyerDeal(BaseModel):
+    """An advertised weekly sale or promotional item from a store flyer."""
+
+    store_name: str
+    store_id: str | None = None
+    product_name: str
+    brand: str | None = None
+    department: str | None = None
+    regular_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    sale_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    prime_price: Decimal | None = Field(default=None, ge=Decimal("0"))
+    unit: Unit = Field(default=Unit.EACH)
+    deal_text: str | None = None
+    description: str | None = None
+    valid_from: str | None = None
+    valid_to: str | None = None
+    featured: bool = False
+    url: str | None = None
+
+    def effective_sale_price(self, use_prime: bool = True) -> Decimal | None:
+        """Return the best applicable advertised sale price."""
+        if use_prime and self.prime_price is not None:
+            return self.prime_price
+        return self.sale_price
 
 
 class PriceComparison(BaseModel):

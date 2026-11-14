@@ -47,6 +47,38 @@ class Settings(BaseSettings):
         description="Base URL for the Kroger Developer API",
     )
 
+    # ── Weekly Flyer Sources (Market Basket & Whole Foods) ───────────────────
+    market_basket_flyer_url: str = Field(
+        default="https://www.shopmarketbasket.com/wp-json/mb/v1/weekly-flyer",
+        description="JSON endpoint for Market Basket weekly flyer items",
+    )
+    whole_foods_base_url: str = Field(
+        default="https://www.wholefoodsmarket.com",
+        description="Base URL for Whole Foods Market website",
+    )
+    whole_foods_store_id: str = Field(
+        default="10010",
+        description="Whole Foods store ID for local weekly sales flyer (e.g. 10010 Cambridge)",
+    )
+    whole_foods_prime: bool = Field(
+        default=True,
+        description="Apply Prime member pricing for Whole Foods weekly deals",
+    )
+    enable_live_flyers: bool = Field(
+        default=False,
+        description="Fetch live weekly flyer sale items from Market Basket, Whole Foods, and Flipp",
+    )
+    flipp_base_url: str = Field(
+        default="https://backflipp.wishabi.com/flipp",
+        description="Base URL for Flipp weekly flyer & item search API",
+    )
+    enable_flipp: bool = Field(
+        default=True,
+        description=(
+            "Include generic nearby grocery store flyers via Flipp when live flyers are enabled"
+        ),
+    )
+
     # ── Streamlit ─────────────────────────────────────────────────────────────
     app_title: str = Field(default="Grocery Helper", description="Streamlit page title")
     debug: bool = Field(default=False, description="Enable verbose debug logging")

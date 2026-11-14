@@ -68,9 +68,10 @@ async def test_mock_pricing_provider_returns_prices() -> None:
     item_known = GroceryItem(id="item_1", name="Eggs", quantity=1, unit=Unit.EACH)
     prices_known = await provider.get_prices(item_known, "90210")
 
-    assert len(prices_known) == 4
+    assert len(prices_known) == 5
     store_names = {p.store_name for p in prices_known}
     assert "ALDI" in store_names
+    assert "Market Basket" in store_names
     assert "Trader Joe's" in store_names
     assert "Kroger" in store_names
     assert "Whole Foods" in store_names
@@ -80,7 +81,7 @@ async def test_mock_pricing_provider_returns_prices() -> None:
     # Unknown item should also produce realistic prices
     item_unknown = GroceryItem(id="item_2", name="Dragon Fruit Exotic", quantity=1)
     prices_unknown = await provider.get_prices(item_unknown, "90210")
-    assert len(prices_unknown) == 4
+    assert len(prices_unknown) == 5
     for p in prices_unknown:
         assert p.price > Decimal("0")
 
@@ -423,3 +424,189 @@ async def test_kroger_provider_context_manager_lifecycle() -> None:
         assert not owned.is_closed
     assert owned.is_closed
     assert provider._owned_http is None
+
+
+@pytest.mark.asyncio
+async def test_pricing_service_overlays_live_flyers_and_prewarms() -> None:
+    """PricingService overlays live MB/WF flyer prices and pre-warms once per optimise run."""
+    from grocery_helper.flyers import MarketBasketFlyerProvider, WholeFoodsFlyerProvider
+
+    mb_provider = AsyncMock(spec=MarketBasketFlyerProvider)
+    mb_provider.STORE_NAME = "Market Basket"
+    mb_provider.fetch_flyer.return_value = []
+
+    async def mb_get_prices(item: GroceryItem, store_zip: str) -> list[StorePrice]:
+        if item.name == "Whole Milk":
+            return [
+                StorePrice(
+                    item_name=item.name,
+                    store_name="Market Basket",
+                    store_id="store_market_basket",
+                    price=Decimal("3.99"),
+                    sale_price=Decimal("2.50"),
+                    is_live=True,
+                    matched_product_name="Market Basket Milk",
+                    deal_details="Save $1.49",
+                )
+            ]
+        return []
+
+    mb_provider.get_prices.side_effect = mb_get_prices
+
+    wf_provider = AsyncMock(spec=WholeFoodsFlyerProvider)
+    wf_provider.STORE_NAME = "Whole Foods"
+    wf_provider.store_id = "10010"
+    wf_provider.use_prime = True
+    wf_provider.fetch_flyer.return_value = []
+    wf_provider.get_prices.return_value = []
+
+    service = PricingService(
+        store_zip="02139",
+        enable_live_flyers=True,
+        enable_flipp=False,
+        market_basket_provider=mb_provider,
+        whole_foods_provider=wf_provider,
+    )
+    g_list = GroceryList(
+        id="list_mb",
+        name="Weekly",
+        items=[
+            GroceryItem(id="1", name="Whole Milk", quantity=1),
+            GroceryItem(id="2", name="Unlisted Item", quantity=1),
+        ],
+    )
+    cart = await service.optimise(g_list)
+
+    mb_provider.fetch_flyer.assert_awaited_once()
+    wf_provider.fetch_flyer.assert_awaited_once()
+
+    milk_comp = next(c for c in cart.comparisons if c.item.name == "Whole Milk")
+    mb_milk = next(p for p in milk_comp.prices if p.store_name == "Market Basket")
+    assert mb_milk.is_live is True
+    assert mb_milk.sale_price == Decimal("2.50")
+
+    # Non-flyer item still keeps Market Basket mock baseline when flyer_only_for_live_stores=False
+    unlisted_comp = next(c for c in cart.comparisons if c.item.name == "Unlisted Item")
+    assert any(p.store_name == "Market Basket" for p in unlisted_comp.prices)
+
+
+@pytest.mark.asyncio
+async def test_pricing_service_advertised_only_omits_unlisted_flyer_stores() -> None:
+    """flyer_only_for_live_stores=True removes mock baselines for Market Basket & Whole Foods."""
+    from grocery_helper.flyers import MarketBasketFlyerProvider, WholeFoodsFlyerProvider
+
+    mb_provider = AsyncMock(spec=MarketBasketFlyerProvider)
+    mb_provider.STORE_NAME = "Market Basket"
+    mb_provider.fetch_flyer.return_value = []
+    mb_provider.get_prices.return_value = []
+
+    wf_provider = AsyncMock(spec=WholeFoodsFlyerProvider)
+    wf_provider.STORE_NAME = "Whole Foods"
+    wf_provider.store_id = "10010"
+    wf_provider.use_prime = True
+    wf_provider.fetch_flyer.return_value = []
+    wf_provider.get_prices.return_value = [
+        StorePrice(
+            item_name="Organic Bananas",
+            store_name="Whole Foods",
+            store_id="whole_foods_10010",
+            price=Decimal("0.99"),
+            sale_price=Decimal("0.49"),
+            is_live=True,
+        )
+    ]
+
+    service = PricingService(
+        store_zip="02139",
+        enable_live_flyers=True,
+        enable_flipp=False,
+        flyer_only_for_live_stores=True,
+        market_basket_provider=mb_provider,
+        whole_foods_provider=wf_provider,
+    )
+    prices = await service.fetch_prices(GroceryItem(id="b1", name="Organic Bananas"))
+    stores = {p.store_name for p in prices}
+
+    assert "Market Basket" not in stores
+    assert "Whole Foods" in stores
+    wf_price = next(p for p in prices if p.store_name == "Whole Foods")
+    assert wf_price.sale_price == Decimal("0.49")
+    assert wf_price.is_live is True
+
+
+@pytest.mark.asyncio
+async def test_pricing_service_flipp_multi_store_overlay_and_precedence() -> None:
+    """Flipp adds nearby stores while direct MB/Whole Foods flyers retain precedence."""
+    from grocery_helper.flyers import (
+        FlippFlyerProvider,
+        MarketBasketFlyerProvider,
+        WholeFoodsFlyerProvider,
+    )
+
+    mb_provider = AsyncMock(spec=MarketBasketFlyerProvider)
+    mb_provider.STORE_NAME = "Market Basket"
+    mb_provider.fetch_flyer.return_value = []
+    mb_provider.get_prices.return_value = [
+        StorePrice(
+            item_name="Chicken Breast",
+            store_name="Market Basket",
+            store_id="store_market_basket",
+            price=Decimal("2.99"),
+            sale_price=Decimal("1.69"),
+            unit=Unit.LB,
+            is_live=True,
+        )
+    ]
+
+    wf_provider = AsyncMock(spec=WholeFoodsFlyerProvider)
+    wf_provider.STORE_NAME = "Whole Foods"
+    wf_provider.store_id = "10010"
+    wf_provider.use_prime = True
+    wf_provider.fetch_flyer.return_value = []
+    wf_provider.get_prices.return_value = []
+
+    flipp_provider = AsyncMock(spec=FlippFlyerProvider)
+    flipp_provider.postal_code = "02139"
+    flipp_provider.merchants = None
+    flipp_provider.fetch_flyer.return_value = []
+    flipp_provider.get_prices.return_value = [
+        StorePrice(
+            item_name="Chicken Breast",
+            store_name="Star Market",
+            store_id="flipp_star_market_1",
+            price=Decimal("4.99"),
+            sale_price=Decimal("2.49"),
+            unit=Unit.LB,
+            is_live=True,
+        ),
+        StorePrice(
+            item_name="Chicken Breast",
+            store_name="Market Basket",
+            store_id="flipp_mb_1",
+            price=Decimal("3.99"),
+            sale_price=Decimal("2.99"),
+            unit=Unit.LB,
+            is_live=True,
+        ),
+    ]
+
+    service = PricingService(
+        store_zip="02139",
+        enable_live_flyers=True,
+        enable_flipp=True,
+        market_basket_provider=mb_provider,
+        whole_foods_provider=wf_provider,
+        flipp_provider=flipp_provider,
+    )
+    prices = await service.fetch_prices(
+        GroceryItem(id="c1", name="Chicken Breast", quantity=2, unit=Unit.LB)
+    )
+    by_store = {p.store_name: p for p in prices}
+
+    # Dynamic Flipp store added
+    assert "Star Market" in by_store
+    assert by_store["Star Market"].sale_price == Decimal("2.49")
+    assert by_store["Star Market"].is_live is True
+    # Direct Market Basket price overrides Flipp's Market Basket entry
+    assert by_store["Market Basket"].sale_price == Decimal("1.69")
+    assert by_store["Market Basket"].store_id == "store_market_basket"

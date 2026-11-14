@@ -206,3 +206,64 @@ class TestAppViewModels:
         items_by_store, subtotals = group_cart_by_store(cart)
         assert list(items_by_store.keys()) == ["ALDI"]
         assert subtotals["ALDI"] == Decimal("7.00")
+
+
+class TestFlyerHelpers:
+    def test_build_flyer_rows_and_matched_flyer_rows(self) -> None:
+        from decimal import Decimal
+
+        from grocery_helper.app import build_flyer_rows, build_matched_flyer_rows
+        from grocery_helper.models import FlyerDeal, GroceryItem, GroceryList, Unit
+
+        deals = [
+            FlyerDeal(
+                store_name="Market Basket",
+                product_name="Fresh Strawberries",
+                regular_price=Decimal("4.99"),
+                sale_price=Decimal("2.50"),
+                unit=Unit.EACH,
+                deal_text="2 for $5 · Save $4.98",
+                department="Produce",
+                valid_from="2026-11-08",
+                valid_to="2026-11-14",
+                featured=True,
+            ),
+            FlyerDeal(
+                store_name="Whole Foods",
+                product_name="Organic Honeycrisp Apples",
+                brand="Whole Foods Market",
+                regular_price=Decimal("3.99"),
+                sale_price=Decimal("2.49"),
+                prime_price=Decimal("1.99"),
+                unit=Unit.LB,
+                deal_text="Prime: $1.99/lb",
+            ),
+        ]
+        rows = build_flyer_rows(deals, use_prime=True)
+        assert len(rows) == 2
+        assert rows[0]["Store"] == "Market Basket"
+        assert rows[0]["Best Sale Price"] == "$2.50"
+        assert rows[1]["Store"] == "Whole Foods"
+        assert rows[1]["Best Sale Price"] == "$1.99 /lb"
+        assert rows[1]["Prime Price"] == "$1.99 /lb"
+
+        g_list = GroceryList(
+            id="demo_1",
+            name="Weekly",
+            items=[GroceryItem(id="1", name="Strawberries", quantity=2, unit=Unit.EACH)],
+        )
+        matched = build_matched_flyer_rows(g_list, deals, use_prime=True)
+        assert len(matched) == 1
+        assert matched[0]["List Item"] == "Strawberries"
+        assert matched[0]["Store"] == "Market Basket"
+        assert matched[0]["Sale Price"] == "$2.50"
+
+    def test_live_flyers_sidebar_toggles_present(self, at: AppTest) -> None:
+        at.run()
+        assert not at.exception
+        toggle_keys = {t.key for t in at.toggle}
+        assert "live_flyers_toggle" in toggle_keys
+        assert "flipp_toggle" in toggle_keys
+        assert "wf_prime_toggle" in toggle_keys
+        input_keys = {ti.key for ti in at.text_input}
+        assert "wf_store_id_input" in input_keys
