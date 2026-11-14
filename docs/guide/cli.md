@@ -53,6 +53,7 @@ grocery-helper optimise <list_id> [OPTIONS]
 - `--no-prime`: Use regular Whole Foods sale prices instead of Prime member prices.
 - `--no-flipp`: Disable generic nearby store circular lookups via Flipp when `--live-flyers` is set.
 - `--flipp-merchants [STORES ...]`: Restrict Flipp lookup to specific store names (e.g. `Hannaford "Star Market" ALDI`).
+- `--open-prices` / `--no-open-prices`: Enable or disable crowdsourced Open Prices shelf-price lookups (`prices.openfoodfacts.org`).
 - `--json`: Output raw JSON data instead of formatted terminal text.
 
 ---

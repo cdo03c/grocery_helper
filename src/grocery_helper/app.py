@@ -172,6 +172,15 @@ def render_sidebar() -> dict[str, Any]:
             help="Apply Amazon Prime member sale prices when listed in the Whole Foods flyer.",
             key="wf_prime_toggle",
         )
+        enable_open_prices = st.toggle(
+            "Include Open Prices (Crowdsourced)",
+            value=settings.enable_open_prices,
+            help=(
+                "Overlay crowdsourced retail receipt/shelf prices from Open Prices "
+                "(prices.openfoodfacts.org) for non-sale items when available."
+            ),
+            key="open_prices_toggle",
+        )
 
         st.divider()
         st.caption(f"Grocery Helper v{__version__}")
@@ -185,6 +194,7 @@ def render_sidebar() -> dict[str, Any]:
         "max_stores": max_stores,
         "enable_live_flyers": enable_live_flyers,
         "enable_flipp": enable_flipp,
+        "enable_open_prices": enable_open_prices,
         "advertised_only": advertised_only,
         "whole_foods_store_id": wf_store_id,
         "whole_foods_prime": wf_prime,
@@ -201,8 +211,15 @@ def _get_anylist_client(config: dict[str, Any]) -> AnyListClient:
     if config["demo_mode"]:
         client = st.session_state.get("demo_anylist_client")
         if not isinstance(client, AnyListClient):
-            client = AnyListClient(demo_mode=True)
-            st.session_state["demo_anylist_client"] = client
+            fresh = AnyListClient(demo_mode=True)
+            # Migrate in-memory demo lists if Streamlit reloaded AnyListClient.
+            old_store = getattr(client, "_demo_store", None)
+            if isinstance(old_store, dict):
+                fresh._demo_store = {
+                    lid: GroceryList.model_validate(lst) for lid, lst in old_store.items()
+                }
+            st.session_state["demo_anylist_client"] = fresh
+            return fresh
         return client
     return AnyListClient(
         email=config["email"],
@@ -262,10 +279,11 @@ def render_list_selector(config: dict[str, Any]) -> tuple[str | None, GroceryLis
             except (AnyListAuthError, AnyListAPIError) as err:
                 st.error(f"Failed to load AnyList lists: {err}")
                 return None, None
-            st.session_state["cached_live_lists"] = lists
+            st.session_state["cached_live_lists"] = [lst.model_dump(mode="json") for lst in lists]
             st.session_state["cached_live_lists_key"] = cache_fp
         else:
-            lists = st.session_state.get("cached_live_lists", [])
+            raw_cached = st.session_state.get("cached_live_lists", [])
+            lists = [GroceryList.model_validate(entry) for entry in raw_cached]
 
     if not lists:
         st.warning("No grocery lists found.")
@@ -316,6 +334,7 @@ async def _run_pricing(
     max_stores: int | None = None,
     enable_live_flyers: bool | None = None,
     enable_flipp: bool | None = None,
+    enable_open_prices: bool | None = None,
     flyer_only_for_live_stores: bool = False,
     whole_foods_store_id: str | None = None,
     whole_foods_prime: bool | None = None,
@@ -325,6 +344,7 @@ async def _run_pricing(
         store_zip=store_zip,
         enable_live_flyers=enable_live_flyers,
         enable_flipp=enable_flipp,
+        enable_open_prices=enable_open_prices,
         flyer_only_for_live_stores=flyer_only_for_live_stores,
         whole_foods_store_id=whole_foods_store_id,
         whole_foods_prime=whole_foods_prime,
@@ -689,7 +709,8 @@ def render_flyers_tab(grocery_list: GroceryList, config: dict[str, Any]) -> None
     for warn in cached_payload.get("warnings", []):
         st.warning(warn)
 
-    deals: list[FlyerDeal] = cached_payload.get("deals", [])
+    raw_deals = cached_payload.get("deals", [])
+    deals: list[FlyerDeal] = [FlyerDeal.model_validate(d) for d in raw_deals]
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Market Basket Deals", cached_payload.get("mb_count", 0))
@@ -827,11 +848,14 @@ def main() -> None:
 
         all_baseline_stores = set(MockPricingProvider.STORE_PROFILES.keys())
         selected_stores = config.get("allowed_stores")
+        multi_chain_live = bool(
+            (config.get("enable_live_flyers") and config.get("enable_flipp"))
+            or config.get("enable_open_prices")
+        )
         effective_allowed_stores = (
             None
             if (
-                config.get("enable_live_flyers")
-                and config.get("enable_flipp")
+                multi_chain_live
                 and isinstance(selected_stores, list)
                 and set(selected_stores) == all_baseline_stores
             )
@@ -847,6 +871,7 @@ def main() -> None:
                     max_stores=config.get("max_stores"),
                     enable_live_flyers=config.get("enable_live_flyers"),
                     enable_flipp=config.get("enable_flipp"),
+                    enable_open_prices=config.get("enable_open_prices"),
                     flyer_only_for_live_stores=bool(config.get("advertised_only")),
                     whole_foods_store_id=config.get("whole_foods_store_id"),
                     whole_foods_prime=config.get("whole_foods_prime"),

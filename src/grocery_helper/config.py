@@ -79,6 +79,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Open Prices (Crowdsourced Retail Shelf Prices) ────────────────────────
+    open_prices_base_url: str = Field(
+        default="https://prices.openfoodfacts.org/api/v1",
+        description="Base URL for the Open Food Facts Open Prices REST API",
+    )
+    enable_open_prices: bool = Field(
+        default=False,
+        description=(
+            "Overlay crowdsourced retail receipt/shelf prices from Open Prices "
+            "(prices.openfoodfacts.org)"
+        ),
+    )
+
     # ── Streamlit ─────────────────────────────────────────────────────────────
     app_title: str = Field(default="Grocery Helper", description="Streamlit page title")
     debug: bool = Field(default=False, description="Enable verbose debug logging")

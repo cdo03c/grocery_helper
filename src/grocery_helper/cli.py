@@ -117,6 +117,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Restrict Flipp lookup to specific store names (e.g. 'Star Market' Hannaford ALDI)",
     )
     optimise_cmd.add_argument(
+        "--open-prices",
+        action="store_true",
+        dest="open_prices",
+        default=None,
+        help="Overlay crowdsourced retail shelf prices from Open Prices (prices.openfoodfacts.org)",
+    )
+    optimise_cmd.add_argument(
+        "--no-open-prices",
+        action="store_false",
+        dest="open_prices",
+        help="Disable Open Prices crowdsourced price lookups even if enabled in .env",
+    )
+    optimise_cmd.add_argument(
         "--json",
         action="store_true",
         dest="as_json",
@@ -219,6 +232,7 @@ async def _async_optimise(args: argparse.Namespace) -> int:
         store_zip=args.store_zip,
         enable_live_flyers=True if getattr(args, "live_flyers", False) else None,
         enable_flipp=False if getattr(args, "no_flipp", False) else None,
+        enable_open_prices=getattr(args, "open_prices", None),
         flyer_only_for_live_stores=bool(getattr(args, "advertised_only", False)),
         whole_foods_store_id=getattr(args, "wf_store_id", None),
         whole_foods_prime=False if getattr(args, "no_prime", False) else None,

@@ -18,6 +18,8 @@ Grocery Helper manages its configuration using [pydantic-settings](https://docs.
 | `KROGER_API_BASE_URL` | String | `https://api.kroger.com/v1` | Base URL for Kroger Developer API. |
 | `ENABLE_LIVE_FLYERS` | Boolean | `false` | Fetch live weekly flyer sale items during pricing and optimization. |
 | `ENABLE_FLIPP` | Boolean | `true` | Include generic nearby store flyers via Flipp when `ENABLE_LIVE_FLYERS=true`. |
+| `ENABLE_OPEN_PRICES` | Boolean | `false` | Overlay crowdsourced retail receipt/shelf prices from Open Prices. |
+| `OPEN_PRICES_BASE_URL` | String | `https://prices.openfoodfacts.org/api/v1` | Base URL for Open Food Facts Open Prices REST API. |
 | `WHOLE_FOODS_STORE_ID` | String | `"10010"` | Whole Foods store ID for local weekly sales flyer (e.g. `10010` Cambridge). |
 | `WHOLE_FOODS_PRIME` | Boolean | `true` | Prefer Amazon Prime member sale prices for Whole Foods deals. |
 | `MARKET_BASKET_FLYER_URL` | String | `https://www.shopmarketbasket.com/wp-json/mb/v1/weekly-flyer` | JSON endpoint for Market Basket weekly flyer items. |

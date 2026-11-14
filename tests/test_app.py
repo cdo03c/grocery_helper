@@ -72,6 +72,8 @@ class TestSidebar:
         assert "allowed_stores_filter" in multiselect_keys
         slider_keys = [s.key for s in at.slider]
         assert "max_stores_slider" in slider_keys
+        toggle_keys = [t.key for t in at.toggle]
+        assert "open_prices_toggle" in toggle_keys
 
 
 # ---------------------------------------------------------------------------

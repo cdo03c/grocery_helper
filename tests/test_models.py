@@ -105,3 +105,48 @@ class TestConvertUnitPrice:
 
     def test_incompatible_units_return_none(self) -> None:
         assert convert_unit_price(Decimal("2.00"), Unit.EACH, Unit.GALLON) is None
+
+
+class TestReloadSafeModels:
+    def test_coerces_stale_reloaded_grocery_item_in_price_comparison(self) -> None:
+        from typing import Any
+
+        import pytest
+        from pydantic import BaseModel, ValidationError
+
+        # Simulate a stale GroceryItem class from an earlier module import in Streamlit
+        class _StaleItem(BaseModel):
+            id: str
+            name: str
+            quantity: float = 1.0
+            unit: str = "each"
+            category: str | None = None
+            notes: str | None = None
+            checked: bool = False
+
+        _StaleItem.__module__ = GroceryItem.__module__
+        _StaleItem.__qualname__ = GroceryItem.__qualname__
+
+        stale: Any = _StaleItem(id="abc", name="Apples", quantity=2.0, unit="lb")
+        comp = PriceComparison(
+            item=stale,
+            prices=[
+                StorePrice(
+                    item_name="Apples",
+                    store_name="Market Basket",
+                    price=Decimal("1.99"),
+                    unit=Unit.LB,
+                )
+            ],
+        )
+        assert isinstance(comp.item, GroceryItem)
+        assert comp.item.name == "Apples"
+        assert comp.item.unit == Unit.LB
+
+        class _UnrelatedModel(BaseModel):
+            id: str
+            name: str
+
+        unrelated: Any = _UnrelatedModel(id="x", name="Milk")
+        with pytest.raises(ValidationError):
+            PriceComparison(item=unrelated)

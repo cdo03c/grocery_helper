@@ -14,6 +14,7 @@ A Python library, CLI, and Streamlit application that integrates with **AnyList*
 - **AnyList Integration**: Pulls shopping lists and items directly from your AnyList account, with zero-configuration offline demo mode for quick testing.
 - **Multi-Store Pricing & Live Weekly Flyers**:
   - **Live Weekly Sale Circulars**: Fetches real-time advertised weekly sales from **Market Basket** (`/wp-json/mb/v1/weekly-flyer`), **Whole Foods Market** (store-specific `/sales-flyer` with Amazon Prime pricing), and nearby grocery chains for any ZIP code via **Flipp** (e.g. ALDI, Star Market, Shaw's, Stop & Shop, Hannaford, Wegmans, Big Y, Costco, Target, Walmart).
+  - **Crowdsourced Shelf Prices (Open Prices)**: Optional integration with Open Food Facts' **Open Prices** (`prices.openfoodfacts.org`) for receipt- and shelf-tag-verified retail prices on non-sale everyday items.
   - **Live Kroger Developer API**: Real-time product search, nearest store locator, and live regular/promotional pricing.
   - **Regional Baseline Pricing Providers**: Deterministic baseline pricing models across **ALDI**, **Market Basket**, **Trader Joe's**, **Kroger**, and **Whole Foods**.
 - **Weekly On-Sale Item Browser & List Matcher**:
@@ -160,8 +161,8 @@ grocery-helper optimise list_001 --zip 90210
 # Output raw JSON for automation scripts
 grocery-helper optimise list_001 --demo --json
 
-# Overlay live weekly flyers (Market Basket, Whole Foods & nearby Flipp stores)
-grocery-helper optimise list_001 --demo --live-flyers --zip 02139
+# Overlay live weekly flyers and Open Prices crowdsourced shelf prices
+grocery-helper optimise list_001 --demo --live-flyers --open-prices --zip 02139
 
 # Browse all live weekly on-sale items & list matches
 grocery-helper flyers --demo --list-id list_001 --zip 02139
@@ -186,6 +187,8 @@ Settings can be specified in `.env` or passed as environment variables:
 | `KROGER_CLIENT_SECRET` | Kroger Developer API Client Secret | `""` |
 | `ENABLE_LIVE_FLYERS` | Overlay live weekly sale flyers during pricing | `false` |
 | `ENABLE_FLIPP` | Include nearby store circulars via Flipp when live flyers are enabled | `true` |
+| `ENABLE_OPEN_PRICES` | Overlay crowdsourced retail shelf prices from Open Prices | `false` |
+| `OPEN_PRICES_BASE_URL` | Open Food Facts Open Prices REST API base URL | `https://prices.openfoodfacts.org/api/v1` |
 | `WHOLE_FOODS_STORE_ID` | Whole Foods store ID for local weekly sales flyer | `10010` |
 | `WHOLE_FOODS_PRIME` | Apply Prime member pricing for Whole Foods deals | `true` |
 | `MARKET_BASKET_FLYER_URL` | Market Basket weekly flyer JSON endpoint | `https://www.shopmarketbasket.com/wp-json/mb/v1/weekly-flyer` |

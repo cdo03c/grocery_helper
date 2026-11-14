@@ -20,11 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `PricingService` to pre-warm and overlay Flipp, Market Basket, and Whole Foods live flyers (with `enable_live_flyers`, `enable_flipp`, `flyer_only_for_live_stores`, `whole_foods_store_id`, `whole_foods_prime`, and `flipp_merchants`).
   - Added sidebar live flyer controls and a **🏷️ Weekly Sales & Flyers** tab in Streamlit for matching deals to your grocery list and searching/filtering all active weekly on-sale items.
   - Added the `grocery-helper flyers` CLI subcommand and `--live-flyers`, `--advertised-only`, `--wf-store-id`, `--no-prime`, `--no-flipp`, and `--flipp-merchants` flags to `optimise`.
+- **Open Prices Crowdsourced Retail Pricing (`grocery_helper.open_prices`)**:
+  - Added `OpenPricesProvider` querying Open Food Facts' Open Prices REST API (`prices.openfoodfacts.org/api/v1`) with product-code search, category-tag staple fallback, ZIP proximity ranking, per-kilogram unit conversion, and cache isolation.
+  - Wired `enable_open_prices` (`Mock → Open Prices → Flipp → Kroger → Market Basket & Whole Foods direct flyers` precedence) into `PricingService`, `.env` config (`ENABLE_OPEN_PRICES`, `OPEN_PRICES_BASE_URL`), Streamlit sidebar (`Include Open Prices (Crowdsourced)`), and CLI (`--open-prices` / `--no-open-prices`).
 
 ### Fixed
 - **Live AnyList Authentication & Protobuf Sync (`grocery_helper.anylist_client`)**:
   - Replaced the legacy `/data/users/login` placeholder (which returned HTTP `403` and was misreported as an invalid password) with AnyList's real multipart `POST /auth/token` login and `/auth/token/refresh` token-renewal flow.
   - Added pure-Python Protocol Buffer serialization/deserialization for `POST /data/user-data/get` (`PBUserDataResponse`) and multipart `operations` uploads to `POST /data/shopping-lists/update` (`PBListOperationList`).
+- **Streamlit Session Reload Safety (`grocery_helper.models`, `grocery_helper.app`, `grocery_helper.pricing`)**:
+  - Added `_ReloadSafeModel` coercion across core Pydantic models and JSON serialization for Streamlit `session_state` caches so hot module reloads never trigger `ValidationError` when filtering stores or recalculating baskets.
 
 ---
 

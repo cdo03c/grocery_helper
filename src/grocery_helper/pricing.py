@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import contextvars
 import hashlib
 import itertools
@@ -40,6 +41,7 @@ from grocery_helper.models import (
     StorePrice,
     Unit,
 )
+from grocery_helper.open_prices import OpenPricesProvider
 from grocery_helper.utils import cache_key, get_cached_price, set_cached_price
 
 logger = logging.getLogger(__name__)
@@ -398,6 +400,7 @@ class PricingService:
         kroger_provider: KrogerPricingProvider | None = None,
         enable_live_flyers: bool | None = None,
         enable_flipp: bool | None = None,
+        enable_open_prices: bool | None = None,
         flyer_only_for_live_stores: bool = False,
         whole_foods_store_id: str | None = None,
         whole_foods_prime: bool | None = None,
@@ -405,6 +408,7 @@ class PricingService:
         market_basket_provider: MarketBasketFlyerProvider | None = None,
         whole_foods_provider: WholeFoodsFlyerProvider | None = None,
         flipp_provider: FlippFlyerProvider | None = None,
+        open_prices_provider: OpenPricesProvider | None = None,
     ) -> None:
         self._store_zip = store_zip
         self._provider: BasePricingProvider = provider or MockPricingProvider()
@@ -413,6 +417,9 @@ class PricingService:
             settings.enable_live_flyers if enable_live_flyers is None else enable_live_flyers
         )
         self._enable_flipp: bool = settings.enable_flipp if enable_flipp is None else enable_flipp
+        self._enable_open_prices: bool = (
+            settings.enable_open_prices if enable_open_prices is None else enable_open_prices
+        )
         self._flyer_only_for_live_stores = flyer_only_for_live_stores
         self._market_basket_provider: MarketBasketFlyerProvider = (
             market_basket_provider or MarketBasketFlyerProvider()
@@ -427,6 +434,9 @@ class PricingService:
         self._flipp_provider: FlippFlyerProvider = flipp_provider or FlippFlyerProvider(
             postal_code=store_zip or "02139",
             merchants=flipp_merchants,
+        )
+        self._open_prices_provider: OpenPricesProvider = (
+            open_prices_provider or OpenPricesProvider()
         )
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -474,10 +484,19 @@ class PricingService:
             )
         else:
             flyer_tag = "flyers_off"
+        if self._enable_open_prices:
+            op_tag = (
+                f"op_on:{self._open_prices_provider.base_url}"
+                if type(self._open_prices_provider) is OpenPricesProvider
+                else f"op_custom:{id(self._open_prices_provider)}"
+            )
+        else:
+            op_tag = "op_off"
         return cache_key(
             provider_tag,
             kroger_tag,
             flyer_tag,
+            op_tag,
             item.name,
             item.unit.value,
             self._store_zip,
@@ -534,10 +553,24 @@ class PricingService:
         cached = get_cached_price(key)
         if cached is not None and isinstance(cached, list):
             logger.debug("Cache hit for '%s' in ZIP %s", item.name, self._store_zip)
-            return [sp.model_copy() for sp in cached]
+            return [
+                sp.model_copy() if isinstance(sp, StorePrice) else StorePrice.model_validate(sp)
+                for sp in cached
+            ]
 
         logger.debug("Fetching prices for '%s' in ZIP %s", item.name, self._store_zip)
         prices = await self._provider.get_prices(item, self._store_zip)
+
+        # Overlay crowdsourced Open Prices shelf data first so live official APIs
+        # and current weekly flyers always take precedence for on-sale items.
+        if self._enable_open_prices:
+            try:
+                open_live = await self._open_prices_provider.get_prices(item, self._store_zip)
+            except Exception as exc:
+                logger.warning("Open Prices lookup failed for '%s': %s", item.name, exc)
+                open_live = []
+            if open_live:
+                prices = self._merge_store_prices(prices, open_live)
 
         # If Kroger live provider is configured, overlay live Kroger prices
         live_kroger: list[StorePrice] = []
@@ -615,23 +648,33 @@ class PricingService:
                 self._safe_warm_flyer(self._whole_foods_provider),
             )
 
-        # Fetch comparisons concurrently across all items, sharing an HTTP client for Kroger
-        if (
+        # Fetch comparisons concurrently across all items, sharing HTTP clients
+        # for Kroger and Open Prices when enabled.
+        share_kroger = (
             isinstance(self._kroger_provider, KrogerPricingProvider)
             and self._kroger_provider.is_configured
             and self._kroger_provider._http is None
             and self._kroger_provider._owned_http is None
             and self._kroger_provider._shared_http_var.get() is None
-        ):
-            async with httpx.AsyncClient(timeout=10.0) as shared_client:
-                token = self._kroger_provider._shared_http_var.set(shared_client)
-                try:
-                    raw_comparisons = await asyncio.gather(
-                        *(self.compare(item) for item in grocery_list.items)
-                    )
-                finally:
-                    self._kroger_provider._shared_http_var.reset(token)
-        else:
+        )
+        share_open_prices = (
+            self._enable_open_prices
+            and isinstance(self._open_prices_provider, OpenPricesProvider)
+            and self._open_prices_provider._http is None
+            and self._open_prices_provider._shared_http_var.get() is None
+        )
+        async with contextlib.AsyncExitStack() as stack:
+            if share_kroger or share_open_prices:
+                shared_client = await stack.enter_async_context(
+                    httpx.AsyncClient(timeout=12.0, follow_redirects=True)
+                )
+                if share_kroger:
+                    k_tok = self._kroger_provider._shared_http_var.set(shared_client)
+                    stack.callback(self._kroger_provider._shared_http_var.reset, k_tok)
+                if share_open_prices:
+                    op_tok = self._open_prices_provider._shared_http_var.set(shared_client)
+                    stack.callback(self._open_prices_provider._shared_http_var.reset, op_tok)
+
             raw_comparisons = await asyncio.gather(
                 *(self.compare(item) for item in grocery_list.items)
             )

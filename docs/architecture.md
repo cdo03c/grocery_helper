@@ -80,13 +80,16 @@ Async HTTP client built around AnyList's `/auth/token` and protobuf `/data/` API
 - **`FlippFlyerProvider`**: Queries Flipp (`backflipp.wishabi.com/flipp`) by ZIP code to discover local grocery circulars and search advertised items across chains.
 - **`match_flyer_deals()`**: Token-similarity matcher linking grocery list entries to active circular titles while avoiding substring false positives (e.g., `"milk"` vs. `"buttermilk"`).
 
+### `grocery_helper.open_prices`
+- **`OpenPricesProvider`**: Queries Open Food Facts' Open Prices REST API (`/products` + `/prices`) for receipt- and shelf-tag-verified US retail prices, normalizing store names (`Whole Foods Market`, `Market Basket`, `Trader Joe's`, `ALDI`, etc.), converting `KILOGRAM` prices to `Unit.LB`, and prioritizing local ZIP matches.
+
 ### `grocery_helper.pricing`
 - **`BasePricingProvider`**: Protocol specifying `async def get_prices(item, store_zip) -> list[StorePrice]`.
 - **`MockPricingProvider`**: Generates deterministic baseline prices with store profiles (**ALDI**, **Market Basket**, **Trader Joe's**, **Kroger**, **Whole Foods**).
 - **`KrogerPricingProvider`**: Authenticates with Kroger Developer OAuth2, resolves nearest store location by ZIP code, and retrieves live SKU prices.
 - **`PricingService`**:
-  - Thread-safe TTL caching keyed by provider, flyer settings, item name, unit, and ZIP code.
-  - Pre-warms and overlays live flyer prices with clear precedence: **Flipp** (generic local chains) → store-specific **Market Basket** & **Whole Foods** circulars (plus optional `flyer_only_for_live_stores=True` mode).
+  - Thread-safe TTL caching keyed by provider, flyer settings, Open Prices setting, item name, unit, and ZIP code.
+  - Pre-warms and overlays live data with clear precedence: **Mock** → **Open Prices** (crowdsourced shelf prices) → **Flipp** (generic local chains) → **Kroger API** → store-specific **Market Basket** & **Whole Foods** circulars (plus optional `flyer_only_for_live_stores=True` mode).
   - Computes unconstrained split baskets and evaluates `max_stores` combinations using subset cover analysis.
 
 ### `grocery_helper.matcher`

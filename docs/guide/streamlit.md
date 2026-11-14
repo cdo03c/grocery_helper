@@ -26,6 +26,7 @@ uv run grocery-helper serve
   - **Advertised flyer prices only (MB & Whole Foods)**: Omit baseline estimates for items not in the Market Basket or Whole Foods weekly flyers.
   - **Whole Foods Store ID**: Set your local Whole Foods store ID (e.g. `10010` Cambridge, `10380` Medford, `10156` Framingham).
   - **Whole Foods Prime Pricing**: Apply Amazon Prime member discounts when listed in the Whole Foods flyer.
+  - **Include Open Prices (Crowdsourced)**: Overlay receipt- and shelf-tag-verified prices from Open Food Facts' Open Prices (`prices.openfoodfacts.org`) when items are not in weekly flyers.
 
 ### 2. In-App Item Management
 Above the results tabs, expand **"➕ Add an Item to this List"**:

@@ -9,8 +9,27 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class _ReloadSafeModel(BaseModel):
+    """Coerce instances created before a hot-module reload into the active model class."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_reloaded_instance(cls, value: Any) -> Any:
+        val_cls = type(value)
+        if (
+            not isinstance(value, cls)
+            and val_cls.__module__ == cls.__module__
+            and val_cls.__qualname__ == cls.__qualname__
+            and hasattr(value, "model_dump")
+        ):
+            return value.model_dump(mode="json")
+        return value
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -60,7 +79,7 @@ def convert_unit_price(price: Decimal, from_unit: Unit, to_unit: Unit) -> Decima
 # ---------------------------------------------------------------------------
 
 
-class GroceryItem(BaseModel):
+class GroceryItem(_ReloadSafeModel):
     """A single item on a grocery list."""
 
     id: str = Field(description="Unique identifier (e.g., from AnyList)")
@@ -72,7 +91,7 @@ class GroceryItem(BaseModel):
     checked: bool = Field(default=False, description="Marked off in shopping session")
 
 
-class GroceryList(BaseModel):
+class GroceryList(_ReloadSafeModel):
     """A named grocery list containing multiple items."""
 
     id: str = Field(description="Unique list identifier")
@@ -82,7 +101,7 @@ class GroceryList(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class StorePrice(BaseModel):
+class StorePrice(_ReloadSafeModel):
     """Price of a grocery item at a specific store."""
 
     item_name: str
@@ -108,7 +127,7 @@ class StorePrice(BaseModel):
         return self.sale_price if self.sale_price is not None else self.price
 
 
-class FlyerDeal(BaseModel):
+class FlyerDeal(_ReloadSafeModel):
     """An advertised weekly sale or promotional item from a store flyer."""
 
     store_name: str
@@ -134,7 +153,7 @@ class FlyerDeal(BaseModel):
         return self.sale_price
 
 
-class PriceComparison(BaseModel):
+class PriceComparison(_ReloadSafeModel):
     """Aggregated price comparison for a single grocery item across stores."""
 
     item: GroceryItem
@@ -176,7 +195,7 @@ class PriceComparison(BaseModel):
         return self.normalized_price(most_expensive) - self.normalized_price(cheapest)
 
 
-class OptimizedCart(BaseModel):
+class OptimizedCart(_ReloadSafeModel):
     """Result of running the pricing optimiser over a grocery list."""
 
     list_id: str
